@@ -6,7 +6,7 @@ The JSON OT type is designed to allow arbitrary concurrent edits in a JSON docum
 
 The JSON OT type replaces the JSON0 OT type. Once this type is working, JSON0 will be deprecated. We'll write functions to automatically convert JSON0 ops to JSON ops.
 
-Unlike the [big table of operations](https://github.com/ottypes/json0/blob/master/README.md#summary-of-operations) in JSON0, the new OT type will only support three operation components:
+Unlike the [big table of operations](https://github.com/ottypes/json0/blob/master/README.md#summary-of-operations) in JSON0, the new OT type will only support essential three operation components:
 
 - Pick up subtree
 - Place subtree
@@ -14,7 +14,9 @@ Unlike the [big table of operations](https://github.com/ottypes/json0/blob/maste
 
 When you pick up a subtree, it can be placed somewhere else or it could be discarded. When you place a subtree, it can come from somewhere else in the document or it could be an immediate literal value.
 
-The type is designed to contain other embedded OT documents (rich text documents or whatever). The subdocuments can be inserted, deleted or moved around the tree directly by the JSON type. If you want to edit subdocuments themselves, you should embed the document's own native operation inside a JSON1 operation.
+The type is designed to contain other embedded OT documents (rich text documents or whatever). The subdocuments can be inserted, deleted or moved around the tree directly by the JSON type. However, if you want to edit subdocuments themselves, you should use the document's own native operations, embedded inside a JSON1 operation. The syntax for this hasn't been defined yet, but it'll probably be pretty simple.
+
+> Note: Currently the plan is to use embedded types to edit raw strings, numbers and booleans too. I'll probably make & bundle a simple, officially blessed subtype for each, as well as add some syntax sugar for it.
 
 
 ## Why? Advantages compared to JSON0
@@ -26,8 +28,9 @@ The JSON0 OT type has some weaknesses:
 - JSON0 is O(N*M) if you transform an operation with M components by an operation with N components.
 - (Not discussed yet) I want an insert-null operation.
 - Doing multiple inserts or multiple removes in a list is quite common, and its quite awkward in JSON0. (You need an operation component for each insert and each remove).
+- The new type should support conversion between JSON operations and [JSON Patch (RFC 6902)](https://tools.ietf.org/html/rfc6902). I want those conversions to be bidirectional if possible, although converting embedded custom OT types to JSON Patch probably won't work.
 
-tldr; After a lot of thinking I think we can have a replacement type which is simpler and easier to maintain, faster and more feature rich.
+tldr; After a lot of thinking I think we can have a replacement type which is simpler and easier to maintain, faster, more feature rich and more widely useful.
 
 
 ## Operations
@@ -96,7 +99,7 @@ For example, given the document `{x: {y: {}}}`, this operation will capitalize t
 }
 ```
 
-Note that for *Y* the operation is picked up at `x.y` and dropped at `X.Y`.
+Note that for *Y* the data is picked up at `x.y` and dropped at `X.Y`.
 
 The operation is carried out in the following order:
 
@@ -114,6 +117,8 @@ The operation is carried out in the following order:
   4. Drop data in slot 1 with value `{}`. Document is now `{X: {Y:{}}}`
   5. Return
   6. Return
+
+Note that the ordering is the same for *drop immediate* (`di:..`) operation components. This allows you to place a new object / array in the document and immediately fill it with stuff moved from elsewhere in the document.
 
 
 # Fancier examples
