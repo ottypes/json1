@@ -84,17 +84,21 @@ describe 'json1', ->
         expect: {o:{b:{e:'b edit', o:{a:{e:'a edit'}}}}}
 
 
-    describe.skip 'lists', ->
+    describe 'lists', ->
 
-      it 'can do a simple list operation', -> xf
+      it 'can rewrite simple list indexes', -> xf
         op2: {l:{0:{di:'oh hi'}}}
         op1: {l:{10:{e:'edit'}}}
         expect: {l:{11:{e:'edit'}}}
-        debug: true
 
-      it.skip 'can change the root from an object to a list', -> xf
+      it 'can change the root from an object to a list', -> xf
         op1: {o:{a:{e:'edit'}}}
         op2: {o:{a:{p:0}}, di:[], l:{0:{d:0}}}
         expect: {l:{0:{e:'edit'}}}
+
+      it 'can handle adjacent drops', -> xf
+        op1: {l:{11:{di:1}, 12:{di:2}, 13:{di:3}}}
+        op2: {l:{0:{p:null}}}
+        expect: {l:{10:{di:1}, 11:{di:2}, 12:{di:3}}}
 
 
