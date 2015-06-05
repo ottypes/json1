@@ -12,10 +12,21 @@ describe 'json1', ->
 
       transform.debug = debug
 
-      left = transform op1, op2, 'left'
-      assert.deepEqual left, expectLeft
-      right = transform op1, op2, 'right'
-      assert.deepEqual left, expectRight
+      try
+        left = transform op1, op2, 'left'
+        assert.deepEqual left, expectLeft
+      catch e
+        transform.debug = true
+        transform op1, op2, 'left'
+        throw e
+
+      try
+        right = transform op1, op2, 'right'
+        assert.deepEqual left, expectRight
+      catch e
+        transform.debug = true
+        transform op1, op2, 'right'
+        throw e
 
     it 'can do a simple reparent', -> xf
       op1: {o:{x:{e:'edit'}}}
@@ -63,9 +74,9 @@ describe 'json1', ->
           b: {d:1, o:{a:{d:0}}}
 
       it 'noop vs swap', -> xf
-        op1: {}
+        op1: null
         op2: swap
-        expect: {}
+        expect: null
 
       it 'can swap two edits', -> xf
         op1: {o:{a:{e:'a edit', o:{b:{e:'b edit'}}}}}

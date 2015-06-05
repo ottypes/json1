@@ -47,64 +47,101 @@ check = (op) ->
 
 
 
-transform = (oldOp, other, direction) ->
+transform = (oldOp, otherOp, direction) ->
   debug = transform.debug
 
   check oldOp
-  check other
+  check otherOp
 
-  op = shallowClone oldOp
-  console.log 'transforming', JSON.stringify(op, null, 2) if debug
+  #op = shallowClone oldOp
+  console.log 'transforming', JSON.stringify(oldOp, null, 2) if debug
 
   held = []
 
   console.log '---- pick phase ----' if debug
 
-  pick = (me, other, parent, key) ->
-    if me.o and other.o then for k, otherChild of other.o when (child = me.o[k])?
-      pick child, otherChild, me, k
+  pick = (op, other) ->
+    console.log 'pick', op, other if debug
+    # Any / all of op, other and parent can be null.
 
-    if other.p?
+    return null if op?.p is null
+
+    dest = if op?.p? then {p:op.p} else null
+    if (edit = op?.e)
+      dest ?= {}
+      dest.e = edit
+ 
+    if other?.o then for k, otherChild of other.o
+      oldChild = op?.o?[k]
+      if (child = pick oldChild, otherChild)
+        dest ?= {}
+        dest.o ?= {}
+        dest.o[k] = child
+
+    # Add in anything that hasn't been copied over as a result of iterating
+    # through other, above. This might be worth special casing instead of
+    # calling pick recursively.
+    if op and op.o then for k, oldChild of op.o when !other?.o?[k]
+      # Basically just copy them in.
+      if (child = pick oldChild, null)
+        dest ?= {}
+        dest.o ?= {}
+        dest.o[k] = child
+
+    #if op.l and other.l
+      # Decend through both lists, transforming 
+
+    if (slot = other?.p)?
       # Pick this node up
-      if parent
-        delete parent.o[key]
-      else
-        op = null
+      console.log "picking up to slot #{other.p}", dest if debug
+      held[slot] = dest
+      return null
 
-      if other.p != null
-        console.log "picking up to slot #{other.p}", me if debug
-        held[other.p] = me
+    return dest
+
     
-  pick op, other
+  op = pick oldOp, otherOp
 
-  console.log 'held', held if debug
-  console.log '---- drop phase ----' if debug
+  console.log '---- drop phase ---- -> held:', held if debug
 
-  drop = (me, other, parent, key) ->
-    if other.d?
-      val = held[other.d] || {}
-      if parent
-        parent.o ?= {}
-        console.log "dropping slot #{other.d} =", val, parent if debug
-        #console.warn('overwriting data!', key, parent.o, parent.o[key]) if parent.o[key]?
-        parent.o[key] = me = val
-      else
-        op = val
+  drop = (dest, op, other) ->
+    if (slot = op?.d?)
+      dest ?= {}
+      dest.d = op.d
 
-      delete held[other.d]
+    # Again, any of dest, op and other can be null.
+    if (slot = other?.d)?
+      console.warn 'Overwriting!' if dest
+      dest = held[slot]
+      console.log "dropping slot #{slot} =", dest if debug
 
-    if other.o
-      me.o ?= {}
-      for k, otherChild of other.o
-        me.o[k] ?= {}
-        drop me.o[k], otherChild, me, k
+      # For debugging.
+      delete held[slot]
 
-  drop op, other
+    if other?.o then for k, otherChild of other.o
+      destChild = dest?.o?[k]
+      opChild = op?.o?[k]
+      if (destChild = drop destChild, opChild, otherChild)
+        dest ?= {}
+        dest.o ?= {}
+        dest.o[k] = destChild
 
-  console.log 'pre strip:', JSON.stringify(op, null, 2) if debug
+    if op?.o then for k, opChild of op.o when !other?.o?[k]
+      # yadda yadda deep copy.
+      destChild = dest?.o?[k]
+      if (destChild = drop destChild, opChild, null)
+        dest ?= {}
+        dest.o ?= {}
+        dest.o[k] = destChild
+
+    return dest
+
+  op = drop op, oldOp, otherOp
+
+  #console.log 'pre strip:', JSON.stringify(op, null, 2) if debug
   console.log held if debug
 
-  strip op
+  #strip op
   check op
   console.log 'result:', op if debug
   return op
@@ -130,8 +167,9 @@ op2 =
 #op1 = {}
 
 
-
-#console.log transform op1, op2, 'left'
+if require.main == module
+  transform.debug = true
+  console.log transform op1, op2, 'left'
 
 
 
