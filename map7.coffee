@@ -8,7 +8,7 @@ mappingChild = (map, key, create = yes) ->
   return null if map is null # in deleted region
   if typeof key is 'number'
     if create
-      map.l ||= []
+      map.l ||= {} # The object is used as a sparse list.
       map.l[key] ||= {}
     else
       map and map.l?[key]
@@ -86,6 +86,8 @@ strip = (map) ->
 
 xf = (oldOp, otherOp) ->
   op = {}
+
+  # Index is a map of move indexes in the other op.
   index = []
 
   opCursor = {map:op, stack:[]}
@@ -136,6 +138,7 @@ xf = (oldOp, otherOp) ->
   strip op
   console.log util.inspect op, depth:10, colors:true
 
+###
   
 op2 =
   l:
@@ -149,7 +152,6 @@ op1 =
 xf op1, op2
 return
 
-###
 op2 =
   o:
     x: {p:0}
@@ -163,7 +165,6 @@ op2 =
         a: {p:1}
     _x: {d:0}
     _a: {d:1}
-###
 
 op2 =
   o:
@@ -184,6 +185,7 @@ op1 =
   
 xf op1, op2
 return
+###
 
 #C = (type, value) -> {t:type, v:value}
 
@@ -191,6 +193,7 @@ return
 #  pick:[C('in', 'x'), C('pickup'), C('skip', 'y'), C('in', 1), C('pickup')]
 #  drop:[C('in', 'a'), C('drop', 1), C('skip', 'z'), C('drop', 0)]
 
+###
 op1 =
   o:
     x: {p:0}
@@ -212,9 +215,34 @@ op2 =
 #walk op2, (what, val, map) -> console.log what, val
 
 xf op1, op2
-
+###
 
 # Swap items
+
+op2 =
+  o:
+    a:
+      p: C('move', 0)
+      o:
+        b:
+          p: C('move', 1)
+    b:
+      d: C('move', 1)
+      o:
+        a:
+          d: C('move', 0)
+
+op1 =
+  o:
+    a:
+      edit: C('edit', 'a')
+      o:
+        b:
+          edit: C('edit', 'b')
+
+xf op1, op2
+
+
 #apply {x:{y:5}},
 #map = opToMap
 #  pick: [C('in','x'), C('pickup'), C('in', 'y'), C('pickup')]

@@ -5,8 +5,17 @@ util = require 'util'
 
 C = (type, value) -> {t:type, v:value}
 
+# This function takes a sparse list object (l:{1:..., 5:...} and returns a
+# sorted list of the keys [1,5,...]
 sortedKeys = (list) -> (+x for x of list).sort (a, b) -> a - b
 
+
+# This function returns a function which maps a list position through an
+# operation. keys is the l: property of the other op, and list must be
+# sortedKeys(keys).
+#
+# The returned function is called with an index. The passed index must be >=
+# any previously passed index.
 xfMap = (keys, list) ->
   pickKeyPos = dropKeyPos = 0
   pickOffset = dropOffset = 0
@@ -27,6 +36,9 @@ xfMap = (keys, list) ->
     return src2 + dropOffset
 
 
+# This function does an inverse map of list drop positions via the pick list.
+# So, if you have an op which does 10:pick, 20:drop it'll map the index 20 ->
+# 21 because thats where the drop would have been if the pick didn't happen.
 xfListReversePick = (keys, list) ->
   keyPos = 0
   offset = 0
@@ -39,7 +51,7 @@ xfListReversePick = (keys, list) ->
     return offset
 
 
-triWalk = (op, other) ->
+listWalk = (op, other) ->
   list = op.l
   opK = sortedKeys list
   otherK = sortedKeys other.l
@@ -49,7 +61,14 @@ triWalk = (op, other) ->
 
   pickIdx = dropIdx = 0
 
-  
+  # We're going to walk through all lists at once. There's 4 of them:
+  # op pick list, op drop list
+  # other pick list, other drop list
+  #
+  # [other pick->other drop] is wrapped by otherMap.
+  # op pick goes through otherMap
+  # op drop goes backwards through op pick list, then through otherMap then
+  # through pick list again.
   loop
     pickIdx++ while pickIdx < opK.length and !list[opK[pickIdx]].p
     dropIdx++ while dropIdx < opK.length and !list[opK[dropIdx]].d
@@ -101,7 +120,7 @@ op1 =
 
 
 
-triWalk op1, op2
+listWalk op1, op2
 
 return
 
