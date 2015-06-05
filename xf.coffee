@@ -197,46 +197,34 @@ transform = (oldOp, otherOp, direction) ->
       opI = otherI = 0
       opRawOffset = 0
 
-      while opI < opKeys.length || otherI < otherKeys.length
+      while (a = opI < opKeys.length) || (b = otherI < otherKeys.length)
         #console.log opI, otherI, opKeys.length, otherKeys.length
-        if opI < opKeys.length
+        if a
           opKey = opKeys[opI]
           opRawOffset = opToRawOffset opKey
           opRaw = opKey + opRawOffset
           #console.log 'opRaw', opRaw
 
-        if otherI < otherKeys.length
+        if b
           otherKey = otherKeys[otherI]
           otherRaw = otherKey + otherToRawOffset otherKey
-
           #console.log 'otherRaw', otherRaw
 
-        if otherI >= otherKeys.length || opRaw < otherRaw
-          #console.log 'a'
-          # Descend into op list
+        opChild = otherChild = null
+        xfIdx = -1
+
+        if !b || opRaw <= otherRaw
           xfIdx = rawToOtherMap(opRaw) - opRawOffset
-          child = drop dest?.l?[xfIdx], opList[opKey], null
-          dest = addDestListChild dest, xfIdx, child
-
+          opChild = opList[opKey]
           opI++
-        else if opI >= opKeys.length || opRaw >= otherRaw
-          #console.log 'b'
-          # Descend into other.
-          xfIdx = rawToOtherMap(otherRaw) - opRawOffset
-          #console.log xfIdx, otherRaw, opRawOffset
-          child = drop dest?.l?[xfIdx], null, otherList[otherKey]
-          dest = addDestListChild dest, xfIdx, child
-
+        if !a || opRaw >= otherRaw
+          xfIdx = rawToOtherMap(otherRaw) - opRawOffset if xfIdx is -1
+          otherChild = otherList[otherKey]
           otherI++
-        else
-          #console.log 'c'
-          # Transform children against each other
-          xfIdx = rawToOtherMap(opRaw) - opRawOffset
-          child = drop dest?.l?[xfIdx], opList[opKey], otherList[otherKey]
-          dest = addDestListChild dest, xfIdx, child
 
-          opI++
-          otherI++
+        child = drop dest?.l?[xfIdx], opChild, otherChild
+        dest = addDestListChild dest, xfIdx, child
+
          
     console.log 'drop returning', dest if debug
     return dest
