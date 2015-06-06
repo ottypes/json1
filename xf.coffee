@@ -1,7 +1,11 @@
 
 # This function takes a sparse list object (l:{1:..., 5:...} and returns a
 # sorted list of the keys [1,5,...]
-sortedKeys = (list) -> (+x for x of list).sort (a, b) -> a - b
+sortedKeys = (list) ->
+  if list
+    (+x for x of list).sort (a, b) -> a - b
+  else
+    []
 
 
 # This function returns a function which maps a list position through an
@@ -46,29 +50,29 @@ xfListReversePick = (keys, list) ->
 
 
 
-check = (op) ->
+checkOp = (op) ->
 
 
 addDestObjChild = (dest, key, child) ->
-  return dest unless child
-  dest ?= {}
-  dest.o ?= {}
-  dest.o[key] = child
+  if child?
+    dest ?= {}
+    dest.o ?= {}
+    dest.o[key] = child
   return dest
 
 addDestListChild = (dest, key, child) ->
-  return dest unless child
-  dest ?= {}
-  dest.l ?= {}
-  dest.l[key] = child
+  if child?
+    dest ?= {}
+    dest.l ?= {}
+    dest.l[key] = child
   return dest
 
 
 transform = (oldOp, otherOp, direction) ->
   debug = transform.debug
 
-  check oldOp
-  check otherOp
+  checkOp oldOp
+  checkOp otherOp
 
   #op = shallowClone oldOp
   console.log 'transforming', JSON.stringify(oldOp, null, 2) if debug
@@ -96,8 +100,8 @@ transform = (oldOp, otherOp, direction) ->
       # If op doesn't have any object children now, its not going to get any in
       # the pick phase.
       if other?.o then for k, otherChild of other.o
-        oldChild = op.o[k] # might be null.
-        dest = addDestObjChild dest, k, pick oldChild, otherChild
+        # op.o[k] might be undefined - but thats ok.
+        dest = addDestObjChild dest, k, pick op.o[k], otherChild
 
       # Add in anything that hasn't been copied over as a result of iterating
       # through other, above. This might be worth special casing instead of
@@ -109,12 +113,10 @@ transform = (oldOp, otherOp, direction) ->
     # **** List children
     if (list = op.l)
       if other?.l
-        console.log 'fancy list splice' if debug
         opK = sortedKeys list
         otherK = sortedKeys other.l
 
         # Iterate through children, adjusting indexes as needed.
-
         otherMap = xfMap otherK, other.l
 
         for idx, i in opK
@@ -176,12 +178,12 @@ transform = (oldOp, otherOp, direction) ->
 
     # **** List children
     if other?.l || op?.l
-      opList = op?.l || {}
-      otherList = other?.l || {}
+      opList = op?.l
+      otherList = other?.l
 
       console.log 'fancy list splice in drop', opList, otherList if debug
 
-      opKeys = if opList then sortedKeys(opList) else []
+      opKeys = sortedKeys opList
       otherKeys = sortedKeys otherList
 
       # Map from raw index -> transformed index
@@ -235,7 +237,7 @@ transform = (oldOp, otherOp, direction) ->
   console.log held if debug
 
   #strip op
-  check op
+  checkOp op
   console.log 'result:', op if debug
   return op
 
