@@ -1,15 +1,20 @@
 
+checkOp = (op) ->
+  # Invariant: There are no empty leaves.
+  # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
+  # Invariant: Slot names start from 0 and they're contiguous.
+
+
+
+
+
+
 LEFT = 0
 RIGHT = 1
 
 # This function takes a sparse list object (l:{1:..., 5:...} and returns a
 # sorted list of the keys [1,5,...]
-sortedKeys = (list) ->
-  if list
-    (+x for x of list).sort (a, b) -> a - b
-  else
-    []
-
+sortedKeys = (list) -> if list then (+x for x of list).sort (a, b) -> a - b else []
 
 # This function returns a function which maps a list position through an
 # operation. keys is the l: property of the other op, and list must be
@@ -55,13 +60,6 @@ xfListReversePick = (keys, list) ->
 
 
 
-checkOp = (op) ->
-  # Invariant: There are no empty leaves.
-  # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
-  # Invariant: Slot names start from 0 and they're contiguous.
-
-
-
 addOChild = (dest, key, child) ->
   if child?
     dest ?= {}
@@ -78,12 +76,6 @@ addLChild = (dest, key, child) ->
 
 hasDrop = (op) -> op && (op.d? || op.di != undefined)
 
-copyDrop = (dest, op) ->
-  dest ?= {}
-  dest.d = op.d if op.d?
-  dest.di = op.di if op.di != undefined
-  return dest
-
 transform = (oldOp, otherOp, direction) ->
   side = if direction == 'left' then LEFT else RIGHT
   debug = transform.debug
@@ -96,7 +88,8 @@ transform = (oldOp, otherOp, direction) ->
     console.log 'op', JSON.stringify(oldOp, null, 2)
     console.log 'op2', JSON.stringify(otherOp, null, 2)
 
-  held = []
+  held = [] # Indexed by op2's slots.
+  slotMap = [] # Map from oldOp's slots -> op's slots.
 
   console.log '---- pick phase ----' if debug
 
@@ -107,13 +100,18 @@ transform = (oldOp, otherOp, direction) ->
     console.log 'pick', op, other if debug
 
     return null if other?.p is null
-    return {p:null} if op.p is null
 
-    dest = if op.p? then {p:op.p} else null
+    dest = null
+    if op.p == null
+      dest = {p:null}
+    else if op.p?
+      slot = slotMap.length
+      slotMap[op.p] = slot
+      dest = {p:slot}
+
     if (edit = op.e)
       dest ?= {}
       dest.e = edit
- 
 
     # **** Object children
     if op.o
@@ -170,9 +168,12 @@ transform = (oldOp, otherOp, direction) ->
     # The other op deletes everything in this subtree anyway.
     return dest if other?.p == null
 
-    if hasDrop(op)
+    if op && (op.di != undefined || (op.d? && slotMap[op.d]?))
       # Uh oh. They collide. There can only be one (tear!)
-      dest = copyDrop(dest, op) unless hasDrop(other) && side == RIGHT
+      unless hasDrop(other) && side == RIGHT
+        dest ?= {}
+        dest.d = slotMap[op.d] if op.d?
+        dest.di = op.di if op.di != undefined
 
     if (slot = other?.d)?
       console.warn 'Overwriting!' if dest
@@ -221,11 +222,6 @@ transform = (oldOp, otherOp, direction) ->
         #console.log opI, otherI, opKeys.length, otherKeys.length
         if b
           otherKey = otherKeys[otherI]
-
-          if otherList[otherKey].p == null
-            otherI++
-            continue
-
           otherRawOffset = otherToRawOffset otherKey
           otherRaw = otherKey + otherRawOffset
           otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
@@ -250,6 +246,18 @@ transform = (oldOp, otherOp, direction) ->
           otherChild = otherList[otherKey]
           otherI++
 
+        # Dirty hack I'll probably regret at some point. If we get both and one
+        # of them is a drop, do the drop and hold the other for the next
+        # iteration.
+        if opChild && otherChild
+          if hasDrop opChild
+            otherChild = null
+            otherI--
+          else if hasDrop otherChild
+            opChild = null
+            opI--
+          # If either is an insert, that has to happen separately.
+        console.log 'list descend', xfIdx, opChild, otherChild if debug
         child = drop dest?.l?[xfIdx], opChild, otherChild
         dest = addLChild dest, xfIdx, child
 

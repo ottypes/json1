@@ -25,18 +25,23 @@ describe 'json1', ->
         assert.deepEqual right, expectRight
       catch e
         transform.debug = true
-        #transform op1, op2, 'right'
+        transform op1, op2, 'right'
         throw e
 
     it 'foo', ->
       xf
         op1: o:
-          #x:{o:{a:{p:0}, b:{d:0}}}
+          x:{o:{a:{p:0}, b:{d:0}}}
           y:{o:{a:{p:1}, b:{d:1}}}
-        op2: {o:{y:{p:null}}}
-        expect: null
-        #expect: o:
-        #  x:{o:{a:{p:0}, b:{d:0}}}
+        op2: {o:{x:{p:null}}}
+        expect: o:
+          y:{o:{a:{p:0}, b:{d:0}}}
+
+    it 'delete the source of a move', -> xf
+      op1: {o:{x:{p:0}, y:{d:0}}}
+      op2: {o:{x:{p:null}}}
+      expect: null
+
 
     describe 'object edits', ->
       it 'can move an edit', -> xf
@@ -88,6 +93,22 @@ describe 'json1', ->
         op1: {o:{a:{p:null}}}
         expect: null # It was already deleted.
 
+      it 'move vs delete', -> xf
+        op1: {o:{y:{o:{a:{p:1}, b:{d:1}}}}}
+        op2: {o:{y:{p:null}}}
+        expect: null
+
+      it 'delete parent of a move', -> xf
+        # obj.a = obj.x.a; delete obj.y;
+        op1: {o:{x:{p:null, o:{a:{p:1}}}, a:{d:1}}}
+        op2: {o:{x:{o:{a:{p:0}, b:{d:0}}}}}
+        expect: {o:{x:{p:null, o:{b:{p:0}}}, a:{d:0}}}
+
+      it.skip 'deletes follow an escapee', -> xf
+        op2: {o:{x:{o:{a:{p:1}}}, a:{d:1}}}
+        op1: {o:{x:{p:null}}}
+        expect: {o:{x:{p:null}, a:{p:null}}}
+
     describe 'swap', ->
       swap =
         o:
@@ -135,6 +156,7 @@ describe 'json1', ->
           op2: {l:{2:{p:null}}}
           op1: {l:{2:{di:'hi'}}}
           expect: {l:{2:{di:'hi'}}}
+
         xf
           op2: {l:{2:{p:null}}}
           op1: {l:{3:{di:'hi'}}}
@@ -145,6 +167,24 @@ describe 'json1', ->
         op1: {l:{2:{di:'hi'}}}
         expectLeft: {l:{2:{di:'hi'}}}
         expectRight: {l:{3:{di:'hi'}}}
+
+      it 'list drop vs delete and drop', ->
+        xf
+          op2: {l:{2:{p:null, di:'other'}}}
+          op1: {l:{2:{di:'hi'}}}
+          expectLeft: {l:{2:{di:'hi'}}}
+          expectRight: {l:{3:{di:'hi'}}}
+
+        xf
+          op2: {l:{2:{p:null}, 3:{di:'other'}}}
+          op1: {l:{3:{di:'hi'}}}
+          expect: {l:{2:{di:'hi'}}}
+
+        xf
+          op2: {l:{2:{p:null}, 3:{di:'other'}}}
+          op1: {l:{4:{di:'hi'}}}
+          expectLeft: {l:{3:{di:'hi'}}}
+          expectRight: {l:{4:{di:'hi'}}}
 
       it 'list delete vs drop', ->
         xf
@@ -176,6 +216,11 @@ describe 'json1', ->
         expect: l:
           0: p:null
           1: di:'hi'
+
+      it 'insert vs delete parent', -> xf
+        op2: {l:{2:{p:null}}} # Shouldn't effect the op.
+        op1: {l:{2:{o:{x:{di:"hi"}}}}}
+        expect: null
 
 
 ###
