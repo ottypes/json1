@@ -1,5 +1,5 @@
 assert = require 'assert'
-type = require './xf'
+type = require './json1'
 
 {transform} = type
 
@@ -8,7 +8,7 @@ type = require './xf'
 describe 'json1', ->
   describe 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
-      if expect then expectLeft = expectRight = expect
+      if expect != undefined then expectLeft = expectRight = expect
 
       transform.debug = debug
 
@@ -22,7 +22,7 @@ describe 'json1', ->
 
       try
         right = transform op1, op2, 'right'
-        assert.deepEqual left, expectRight
+        assert.deepEqual right, expectRight
       catch e
         transform.debug = true
         transform op1, op2, 'right'
@@ -101,4 +101,51 @@ describe 'json1', ->
         op2: {l:{0:{p:null}}}
         expect: {l:{10:{di:1}, 11:{di:2}, 12:{di:3}}}
 
+      it 'fixes drop indexes correctly 1', -> xf
+        op2: {l:{1:{p:null}}}
+        op1: l:
+          0: p:null
+          1: di:'hi'
+        expect: l:
+          0: {p:null, di:'hi'}
 
+      it 'list drop vs delete uses the correct result index', ->
+        xf
+          op2: {l:{2:{p:null}}}
+          op1: {l:{2:{di:'hi'}}}
+          expect: {l:{2:{di:'hi'}}}
+
+        xf
+          op2: {l:{2:{p:null}}}
+          op1: {l:{3:{di:'hi'}}}
+          expect: {l:{2:{di:'hi'}}}
+
+      it 'list drop vs drop uses the correct result index', ->
+        xf
+          op2: {l:{2:{di:'other'}}}
+          op1: {l:{2:{di:'hi'}}}
+          expectLeft: {l:{2:{di:'hi'}}}
+          expectRight: {l:{3:{di:'hi'}}}
+
+      it 'fixes drop indexes correctly 2', -> xf
+        op2: {l:{2:{p:null}}} # Shouldn't effect the op.
+        op1: l:
+          0: p:null
+          1: di:'hi'
+        expect: l:
+          0: p:null
+          1: di:'hi'
+
+
+###
+        op1:
+          l:
+            1: {p:1}
+            2: {p:null}
+            3:
+              p: null
+              d: 1
+            4: {p:null}
+        expect: {}
+
+###

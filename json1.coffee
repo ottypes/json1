@@ -1,4 +1,7 @@
 
+LEFT = 0
+RIGHT = 1
+
 # This function takes a sparse list object (l:{1:..., 5:...} and returns a
 # sorted list of the keys [1,5,...]
 sortedKeys = (list) ->
@@ -18,8 +21,8 @@ xfMap = (keys, list) ->
   pickKeyPos = dropKeyPos = 0
   pickOffset = dropOffset = 0
 
-  (src) ->
-    while pickKeyPos < keys.length and (k = keys[pickKeyPos]) <= src
+  (src, pickSide, dropSide) ->
+    while pickKeyPos < keys.length and ((k = keys[pickKeyPos]) < src || (pickSide == RIGHT && k == src))
       pickKeyPos++
       if list[k].p != undefined
         if src == k
@@ -27,7 +30,12 @@ xfMap = (keys, list) ->
         pickOffset--
 
     src2 = src + pickOffset
-    while dropKeyPos < keys.length and (k = keys[dropKeyPos]) < src2 + dropOffset
+    #while dropKeyPos < keys.length and (k = keys[dropKeyPos]) < src2 + dropOffset
+    while dropKeyPos < keys.length
+      k = keys[dropKeyPos]
+      break if dropSide is LEFT and k >= src2 + dropOffset
+      break if dropSide is RIGHT and k > src2 + dropOffset
+
       dropKeyPos++
       dropOffset++ if list[k].d? or (list[k].di != undefined)
 
@@ -53,14 +61,14 @@ xfListReversePick = (keys, list) ->
 checkOp = (op) ->
 
 
-addDestObjChild = (dest, key, child) ->
+addOChild = (dest, key, child) ->
   if child?
     dest ?= {}
     dest.o ?= {}
     dest.o[key] = child
   return dest
 
-addDestListChild = (dest, key, child) ->
+addLChild = (dest, key, child) ->
   if child?
     dest ?= {}
     dest.l ?= {}
@@ -69,13 +77,14 @@ addDestListChild = (dest, key, child) ->
 
 
 transform = (oldOp, otherOp, direction) ->
+  side = if direction == 'left' then LEFT else RIGHT
   debug = transform.debug
 
   checkOp oldOp
   checkOp otherOp
 
   #op = shallowClone oldOp
-  console.log 'transforming', JSON.stringify(oldOp, null, 2) if debug
+  console.log "transforming #{direction}", JSON.stringify(oldOp, null, 2) if debug
 
   held = []
 
@@ -101,14 +110,14 @@ transform = (oldOp, otherOp, direction) ->
       # the pick phase.
       if other?.o then for k, otherChild of other.o
         # op.o[k] might be undefined - but thats ok.
-        dest = addDestObjChild dest, k, pick op.o[k], otherChild
+        dest = addOChild dest, k, pick op.o[k], otherChild
 
       # Add in anything that hasn't been copied over as a result of iterating
       # through other, above. This might be worth special casing instead of
       # calling pick recursively.
       for k, oldChild of op.o when !other?.o?[k]
         # Basically just copy them in.
-        dest = addDestObjChild dest, k, pick oldChild, null
+        dest = addOChild dest, k, pick oldChild, null
 
     # **** List children
     if (list = op.l)
@@ -123,12 +132,11 @@ transform = (oldOp, otherOp, direction) ->
           oldChild = list[idx]
           otherChild = other.l[idx]
           if (child = pick oldChild, otherChild)
-            newIdx = otherMap idx
-            dest = addDestListChild dest, newIdx, child
+            newIdx = otherMap idx, side, RIGHT
+            dest = addLChild dest, newIdx, child
       else
         # Just go through normally - no transform of indexes needed.
-        for idx, oldChild of list
-          dest = addDestListChild dest, idx, pick oldChild, null
+        dest = addLChild dest, idx, pick oldChild, null for idx, oldChild of list
 
     if (slot = other?.p)?
       # Pick this node up
@@ -166,14 +174,11 @@ transform = (oldOp, otherOp, direction) ->
 
     # ***** Object children
     if other?.o then for k, otherChild of other.o
-      destChild = dest?.o?[k]
-      opChild = op?.o?[k]
-      dest = addDestObjChild dest, k, drop destChild, opChild, otherChild
+      dest = addOChild dest, k, drop dest?.o?[k], op?.o?[k], otherChild
 
     if op?.o then for k, opChild of op.o when !other?.o?[k]
       # yadda yadda deep copy.
-      destChild = dest?.o?[k]
-      dest = addDestObjChild dest, k, drop destChild, opChild, null
+      dest = addOChild dest, k, drop dest?.o?[k], opChild, null
 
 
     # **** List children
@@ -189,43 +194,49 @@ transform = (oldOp, otherOp, direction) ->
       # Map from raw index -> transformed index
       rawToOtherMap = xfMap otherKeys, otherList
 
+      # I'm surprised this is needed. We need to transform the other map's
+      # indexes too!
+      rawToOpMap = xfMap opKeys, opList
+
       # Map from drop index in op -> raw index offset
       opToRawOffset = xfListReversePick opKeys, opList
 
       # Map from drop index in other -> raw index offset
       otherToRawOffset = xfListReversePick otherKeys, otherList
 
-
       opI = otherI = 0
-      opRawOffset = 0
 
-      while (a = opI < opKeys.length) || (b = otherI < otherKeys.length)
+      while (a = opI < opKeys.length; b = otherI < otherKeys.length; a || b)
         #console.log opI, otherI, opKeys.length, otherKeys.length
         if a
           opKey = opKeys[opI]
           opRawOffset = opToRawOffset opKey
           opRaw = opKey + opRawOffset
-          #console.log 'opRaw', opRaw
+          opIdx = rawToOtherMap(opRaw, LEFT, side) - opRawOffset
+          console.log 'opRaw', opRaw, 'op', opList[opKey] if debug
 
         if b
           otherKey = otherKeys[otherI]
-          otherRaw = otherKey + otherToRawOffset otherKey
-          #console.log 'otherRaw', otherRaw
+          otherRawOffset = otherToRawOffset otherKey
+          otherRaw = otherKey + otherRawOffset
+          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
+          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
 
         opChild = otherChild = null
         xfIdx = -1
 
-        if !b || opRaw <= otherRaw
-          xfIdx = rawToOtherMap(opRaw) - opRawOffset
+        if a && (!b || opIdx <= otherIdx)
+          # Left because drops always insert left of the target
+          xfIdx = opIdx
           opChild = opList[opKey]
           opI++
-        if !a || opRaw >= otherRaw
-          xfIdx = rawToOtherMap(otherRaw) - opRawOffset if xfIdx is -1
+        if b && (!a || opIdx >= otherIdx)
+          xfIdx = otherIdx
           otherChild = otherList[otherKey]
           otherI++
 
         child = drop dest?.l?[xfIdx], opChild, otherChild
-        dest = addDestListChild dest, xfIdx, child
+        dest = addLChild dest, xfIdx, child
 
          
     console.log 'drop returning', dest if debug
