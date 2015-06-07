@@ -56,6 +56,10 @@ xfListReversePick = (keys, list) ->
 
 
 checkOp = (op) ->
+  # Invariant: There are no empty leaves.
+  # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
+  # Invariant: Slot names start from 0 and they're contiguous.
+
 
 
 addOChild = (dest, key, child) ->
@@ -87,8 +91,10 @@ transform = (oldOp, otherOp, direction) ->
   checkOp oldOp
   checkOp otherOp
 
-  #op = shallowClone oldOp
-  console.log "transforming #{direction}", JSON.stringify(oldOp, null, 2) if debug
+  if debug
+    console.log "transforming #{direction}:"
+    console.log 'op', JSON.stringify(oldOp, null, 2)
+    console.log 'op2', JSON.stringify(otherOp, null, 2)
 
   held = []
 
@@ -100,6 +106,7 @@ transform = (oldOp, otherOp, direction) ->
 
     console.log 'pick', op, other if debug
 
+    return null if other?.p is null
     return {p:null} if op.p is null
 
     dest = if op.p? then {p:op.p} else null
@@ -160,6 +167,9 @@ transform = (oldOp, otherOp, direction) ->
     # nested somewhere in other might be a drop.
     console.log 'drop', dest, op, other if debug
 
+    # The other op deletes everything in this subtree anyway.
+    return dest if other?.p == null
+
     if hasDrop(op)
       # Uh oh. They collide. There can only be one (tear!)
       dest = copyDrop(dest, op) unless hasDrop(other) && side == RIGHT
@@ -209,6 +219,18 @@ transform = (oldOp, otherOp, direction) ->
 
       while (a = opI < opKeys.length; b = otherI < otherKeys.length; a || b)
         #console.log opI, otherI, opKeys.length, otherKeys.length
+        if b
+          otherKey = otherKeys[otherI]
+
+          if otherList[otherKey].p == null
+            otherI++
+            continue
+
+          otherRawOffset = otherToRawOffset otherKey
+          otherRaw = otherKey + otherRawOffset
+          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
+          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
+
         if a
           opKey = opKeys[opI]
           opRawOffset = opToRawOffset opKey
@@ -216,15 +238,7 @@ transform = (oldOp, otherOp, direction) ->
           opIdx = rawToOtherMap(opRaw, LEFT, side) - opRawOffset
           console.log 'opRaw', opRaw, 'op', opList[opKey] if debug
 
-        if b
-          otherKey = otherKeys[otherI]
-          otherRawOffset = otherToRawOffset otherKey
-          otherRaw = otherKey + otherRawOffset
-          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
-          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
-
         opChild = otherChild = null
-        xfIdx = -1
 
         if a && (!b || opIdx <= otherIdx)
           # Left because drops always insert left of the target

@@ -25,8 +25,18 @@ describe 'json1', ->
         assert.deepEqual right, expectRight
       catch e
         transform.debug = true
-        transform op1, op2, 'right'
+        #transform op1, op2, 'right'
         throw e
+
+    it 'foo', ->
+      xf
+        op1: o:
+          #x:{o:{a:{p:0}, b:{d:0}}}
+          y:{o:{a:{p:1}, b:{d:1}}}
+        op2: {o:{y:{p:null}}}
+        expect: null
+        #expect: o:
+        #  x:{o:{a:{p:0}, b:{d:0}}}
 
     describe 'object edits', ->
       it 'can move an edit', -> xf
@@ -72,6 +82,11 @@ describe 'json1', ->
         op2: {o:{x:{di:"two"}}}
         expectLeft: {o:{x:{di:"one"}}}
         expectRight: null
+
+      it 'delete vs delete', -> xf
+        op2: {o:{a:{p:null}}}
+        op1: {o:{a:{p:null}}}
+        expect: null # It was already deleted.
 
     describe 'swap', ->
       swap =
@@ -120,7 +135,6 @@ describe 'json1', ->
           op2: {l:{2:{p:null}}}
           op1: {l:{2:{di:'hi'}}}
           expect: {l:{2:{di:'hi'}}}
-
         xf
           op2: {l:{2:{p:null}}}
           op1: {l:{3:{di:'hi'}}}
@@ -147,6 +161,12 @@ describe 'json1', ->
           op2: {l:{2:{di:'hi'}}}
           op1: {l:{3:{p:null}}}
           expect: {l:{4:{p:null}}}
+
+      it 'list delete vs delete', ->
+        xf
+          op2: {l:{1:{p:null}}}
+          op1: {l:{1:{p:null}}}
+          expect: null # It was already deleted.
 
       it 'fixes drop indexes correctly 2', -> xf
         op2: {l:{2:{p:null}}} # Shouldn't effect the op.
