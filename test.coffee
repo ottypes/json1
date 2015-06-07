@@ -28,44 +28,50 @@ describe 'json1', ->
         transform op1, op2, 'right'
         throw e
 
-    it 'can do a simple reparent', -> xf
-      op1: {o:{x:{e:'edit'}}}
-      op2: {o:{x:{p:0}, y:{d:0}}}
-      expect: {o:{y:{e:'edit'}}}
+    describe 'object edits', ->
+      it 'can move an edit', -> xf
+        op1: {o:{x:{e:'edit'}}}
+        op2: {o:{x:{p:0}, y:{d:0}}}
+        expect: {o:{y:{e:'edit'}}}
 
-    it 'can reparent with some extra junk', -> xf
-      op1: {o:{x:{p:0}, y:{d:0}}}
-      op2:
-        o:
-          x:
-            p:0
-            o:
-              a: {p:1}
-          _x: {d:0}
-          _a: {d:1}
+      it 'can reparent with some extra junk', -> xf
+        op1: {o:{x:{p:0}, y:{d:0}}}
+        op2:
+          o:
+            x:
+              p:0
+              o:
+                a: {p:1}
+            _x: {d:0}
+            _a: {d:1}
 
-      expect: {o:{_x:{p:0}, y:{d:0}}}
+        expect: {o:{_x:{p:0}, y:{d:0}}}
 
-    it 'can move the source of a pickup', -> xf
-      op1:
-        o:
-          x:
-            p:0
-            o:
-              a: {p:1}
-          _x: {d:0}
-          _a: {d:1}
-      op2: {o:{x:{p:0}, y:{d:0}}}
+      it 'can move the source of a pickup', -> xf
+        op1:
+          o:
+            x:
+              p:0
+              o:
+                a: {p:1}
+            _x: {d:0}
+            _a: {d:1}
+        op2: {o:{x:{p:0}, y:{d:0}}}
 
-      expect:
-        o:
-          y:
-            p:0
-            o:
-              a: {p:1}
-          _x: {d:0}
-          _a: {d:1}
+        expect:
+          o:
+            y:
+              p:0
+              o:
+                a: {p:1}
+            _x: {d:0}
+            _a: {d:1}
 
+      it 'obeys symmetry', -> xf
+        op1: {o:{x:{di:"one"}}}
+        op2: {o:{x:{di:"two"}}}
+        expectLeft: {o:{x:{di:"one"}}}
+        expectRight: null
 
     describe 'swap', ->
       swap =
@@ -120,12 +126,27 @@ describe 'json1', ->
           op1: {l:{3:{di:'hi'}}}
           expect: {l:{2:{di:'hi'}}}
 
-      it 'list drop vs drop uses the correct result index', ->
+      it 'list drop vs drop uses the correct result index', -> xf
+        op2: {l:{2:{di:'other'}}}
+        op1: {l:{2:{di:'hi'}}}
+        expectLeft: {l:{2:{di:'hi'}}}
+        expectRight: {l:{3:{di:'hi'}}}
+
+      it 'list delete vs drop', ->
         xf
-          op2: {l:{2:{di:'other'}}}
-          op1: {l:{2:{di:'hi'}}}
-          expectLeft: {l:{2:{di:'hi'}}}
-          expectRight: {l:{3:{di:'hi'}}}
+          op2: {l:{2:{di:'hi'}}}
+          op1: {l:{1:{p:null}}}
+          expect: {l:{1:{p:null}}}
+
+        xf
+          op2: {l:{2:{di:'hi'}}}
+          op1: {l:{2:{p:null}}}
+          expect: {l:{3:{p:null}}}
+
+        xf
+          op2: {l:{2:{di:'hi'}}}
+          op1: {l:{3:{p:null}}}
+          expect: {l:{4:{p:null}}}
 
       it 'fixes drop indexes correctly 2', -> xf
         op2: {l:{2:{p:null}}} # Shouldn't effect the op.

@@ -24,10 +24,7 @@ xfMap = (keys, list) ->
   (src, pickSide, dropSide) ->
     while pickKeyPos < keys.length and ((k = keys[pickKeyPos]) < src || (pickSide == RIGHT && k == src))
       pickKeyPos++
-      if list[k].p != undefined
-        if src == k
-          console.log 'TODO - requested item was picked up by other op.'
-        pickOffset--
+      pickOffset-- if list[k].p != undefined
 
     src2 = src + pickOffset
     #while dropKeyPos < keys.length and (k = keys[dropKeyPos]) < src2 + dropOffset
@@ -75,6 +72,13 @@ addLChild = (dest, key, child) ->
     dest.l[key] = child
   return dest
 
+hasDrop = (op) -> op && (op.d? || op.di != undefined)
+
+copyDrop = (dest, op) ->
+  dest ?= {}
+  dest.d = op.d if op.d?
+  dest.di = op.di if op.di != undefined
+  return dest
 
 transform = (oldOp, otherOp, direction) ->
   side = if direction == 'left' then LEFT else RIGHT
@@ -156,12 +160,9 @@ transform = (oldOp, otherOp, direction) ->
     # nested somewhere in other might be a drop.
     console.log 'drop', dest, op, other if debug
 
-    if (slot = op?.d)?
-      dest ?= {}
-      dest.d = slot
-    if (obj = op?.di) != undefined
-      dest ?= {}
-      dest.di = obj # Shallow copy of the data itself.
+    if hasDrop(op)
+      # Uh oh. They collide. There can only be one (tear!)
+      dest = copyDrop(dest, op) unless hasDrop(other) && side == RIGHT
 
     if (slot = other?.d)?
       console.warn 'Overwriting!' if dest
