@@ -1,4 +1,6 @@
 
+assert = require 'assert'
+
 checkOp = (op) ->
   # Invariant: There are no empty leaves.
   # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
@@ -161,6 +163,8 @@ transform = (oldOp, otherOp, direction) ->
   console.log '---- drop phase ---- -> held:', held, op if debug
 
   drop = (dest, op, other) ->
+    assert op || other
+
     # Any of dest, op and other can be null. No early return here because
     # nested somewhere in other might be a drop.
     console.log 'drop', dest, op, other if debug
@@ -220,43 +224,39 @@ transform = (oldOp, otherOp, direction) ->
 
       while (a = opI < opKeys.length; b = otherI < otherKeys.length; a || b)
         #console.log opI, otherI, opKeys.length, otherKeys.length
-        if b
-          otherKey = otherKeys[otherI]
-          otherRawOffset = otherToRawOffset otherKey
-          otherRaw = otherKey + otherRawOffset
-          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
-          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
+        opChild = otherChild = null
 
         if a
           opKey = opKeys[opI]
           opRawOffset = opToRawOffset opKey
           opRaw = opKey + opRawOffset
           opIdx = rawToOtherMap(opRaw, LEFT, side) - opRawOffset
+          opChild = opList[opKey]
           console.log 'opRaw', opRaw, 'op', opList[opKey] if debug
 
-        opChild = otherChild = null
-
-        if a && (!b || opIdx <= otherIdx)
-          # Left because drops always insert left of the target
-          xfIdx = opIdx
-          opChild = opList[opKey]
-          opI++
-        if b && (!a || opIdx >= otherIdx)
-          xfIdx = otherIdx
+        if b
+          otherKey = otherKeys[otherI]
+          otherRawOffset = otherToRawOffset otherKey
+          otherRaw = otherKey + otherRawOffset
+          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
+          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
           otherChild = otherList[otherKey]
-          otherI++
 
-        # Dirty hack I'll probably regret at some point. If we get both and one
-        # of them is a drop, do the drop and hold the other for the next
-        # iteration.
         if opChild && otherChild
-          if hasDrop opChild
-            otherChild = null
-            otherI--
-          else if hasDrop otherChild
-            opChild = null
-            opI--
-          # If either is an insert, that has to happen separately.
+          # See if we can knock one off.
+          if opIdx < otherIdx then otherChild = null
+          else if opIdx > otherIdx then opChild = null
+          else
+            assert.equal opIdx, otherIdx
+            # Hmm... maybe one is an insert.
+            otherChild = null if hasDrop opChild
+            opChild = null if hasDrop otherChild
+            assert opChild || otherChild
+
+        opI++ if opChild
+        otherI++ if otherChild
+        xfIdx = if opChild then opIdx else otherIdx
+
         console.log 'list descend', xfIdx, opChild, otherChild if debug
         child = drop dest?.l?[xfIdx], opChild, otherChild
         dest = addLChild dest, xfIdx, child
@@ -278,27 +278,12 @@ transform = (oldOp, otherOp, direction) ->
 
 
 
-op1 =
-  o:
-    x: {p:0}
-    y: {d:0}
-
-op2 =
-  o:
-    x:
-      p:0
-      o:
-        a: {p:1}
-    _x: {d:0}
-    _a: {d:1}
-
-
-#op1 = {}
-
 
 if require.main == module
   transform.debug = true
-  console.log transform op1, op2, 'left'
+  #console.log transform op1, op2, 'left'
+
+  transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
 
 
 
