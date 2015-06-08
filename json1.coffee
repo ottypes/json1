@@ -1,5 +1,33 @@
+# This is the JSON OT type implementation. It is a successor to JSON0
+# (https://github.com/ottypes/json0), better in a bunch of ways.
+#
+# This type follows after the text type. Instead of operations being a list of
+# small changes, an operation is a tree mirroring the structure of the document
+# itself. Operations contain three things:
+# - Edits
+# - Pick up operations
+# - Drop operations
+#
+# The complete spec is in spec.md alongside this file.
+#
+#
+# ** This is still a work in progress. The tests don't all pass yet. **
+#
+# My TODO list:
+# - Embedded subtypes
+# - Explicit embedding of string, number operations
+# - Compose function
+# - Fuzzer, fix bugs
+# - Transform - fix list reverse transform code to look like list6.coffee
+# - Specify a backup move location in the op
+# - Transitive deletes in transform ('delete follows an escapee' test)
+# - Conversion between json1 ops and json0, json-patch.
+# - Port to JS.
+
 
 assert = require 'assert'
+
+# *** Helper functions
 
 # This function takes a sparse list object (l:{1:..., 5:...} and returns a
 # sorted list of the keys [1,5,...]
@@ -24,15 +52,11 @@ clone = (old) ->
 
 hasDrop = (op) -> op && (op.d? || op.di != undefined)
 
+
+# *********
+
 module.exports = type =
   name: 'json1'
-
-###
-walk = (op, fn) ->
-  fn op
-  walk child, fn for k, child of op.o if op.o
-  walk child, fn for k, child of op.l if op.l
-###
 
 eachChild = (op, fn) ->
   fn k, child for k, child of op.o if op.o
@@ -130,6 +154,7 @@ type.apply = (snapshot, op) ->
 
   # Phase 2: Drop
   drop = (subDoc, subOp) ->
+    #console.log 'drop', subDoc, subOp
     if subOp.di != undefined
       console.warn 'Overwriting a subtree. You should have deleted it' if subDoc != undefined
       subDoc = clone subOp.di
@@ -144,12 +169,12 @@ type.apply = (snapshot, op) ->
     if Array.isArray(subDoc) and subOp.l
       keys = sortedKeys subOp.l
       for i in keys
-        replacement = drop subDoc[i], subOp.l[i]
         if hasDrop(subOp.l[i])
-          subDoc.splice i, 0, replacement
+          subDoc.splice i, 0, drop undefined, subOp.l[i]
         else
           # Otherwise ... nothing?
-          assert.strictEqual replacement, subDoc[i]
+          result = drop subDoc[i], subOp.l[i]
+          assert.strictEqual result, subDoc[i]
 
     return subDoc
 

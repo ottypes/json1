@@ -43,6 +43,14 @@ describe 'json1', ->
         doc: [0,1,2]
         op: {l:{1:{p:0}, 2:{d:0}}}
         expected: [0,2,1]
+
+    describe 'complex list index stuff', ->
+      it 'sdaf', ->
+        apply
+          doc: [0,1,2,3,4,5]
+          op: {l:{1:{p:null, di:11}, 2:{p:null, di:12}}}
+          expected: [0,11,12,3,4,5]
+
         
 
   describe 'transform', ->
