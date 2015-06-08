@@ -5,7 +5,46 @@ type = require './json1'
 
 # Transform tests
 
+printRepro = (op1, op2, direction, expect) ->
+  console.error 'Repro with:'
+  console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
+
+
+
 describe 'json1', ->
+  describe 'apply', ->
+    apply = ({doc:snapshot, op, expected}) ->
+      snapshot = type.apply snapshot, op
+      assert.deepEqual snapshot, expected
+
+    it 'Can set properties', ->
+      apply
+        doc: null
+        op: {di:5}
+        expected: 5
+        
+      apply
+        doc: []
+        op: {l:1:{di:17}}
+        expected: [17]
+
+      apply
+        doc: {}
+        op: {o:{x:{di:5}}}
+        expected: {x:5}
+
+    it 'can move', ->
+      apply
+        doc: {x:5}
+        op: {o:{x:{p:0}, y:{d:0}}}
+        expected: {y:5}
+
+      apply
+        doc: [0,1,2]
+        op: {l:{1:{p:0}, 2:{d:0}}}
+        expected: [0,2,1]
+        
+
   describe 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
       if expect != undefined then expectLeft = expectRight = expect
@@ -13,18 +52,22 @@ describe 'json1', ->
       transform.debug = debug
 
       try
+        #printRepro op1, op2, 'left', expectLeft
         left = transform op1, op2, 'left'
         assert.deepEqual left, expectLeft
       catch e
         transform.debug = true
+        printRepro op1, op2, 'left', expectLeft
         transform op1, op2, 'left'
         throw e
 
       try
+        #printRepro op1, op2, 'right', expectRight
         right = transform op1, op2, 'right'
         assert.deepEqual right, expectRight
       catch e
         transform.debug = true
+        printRepro op1, op2, 'right', expectRight
         transform op1, op2, 'right'
         throw e
 

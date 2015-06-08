@@ -1,22 +1,165 @@
 
 assert = require 'assert'
 
-checkOp = (op) ->
-  # Invariant: There are no empty leaves.
+# This function takes a sparse list object (l:{1:..., 5:...} and returns a
+# sorted list of the keys [1,5,...]
+sortedKeys = (list) -> if list then (+x for x of list).sort (a, b) -> a - b else []
+
+isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
+
+clone = (old) ->
+  return null if old is null
+
+  if Array.isArray o
+    l = new Array old.length
+    l[i] = v for v, i in old
+    return l
+  else if typeof old == 'object'
+    o = {}
+    o[k] = v for k, v of old
+    return o
+  else
+    # Everything else in JS is immutable.
+    return old
+
+hasDrop = (op) -> op && (op.d? || op.di != undefined)
+
+module.exports = type =
+  name: 'json1'
+
+###
+walk = (op, fn) ->
+  fn op
+  walk child, fn for k, child of op.o if op.o
+  walk child, fn for k, child of op.l if op.l
+###
+
+eachChild = (op, fn) ->
+  fn k, child for k, child of op.o if op.o
+  fn k, child for k, child of op.l if op.l
+
+subtypes = {}
+type.registerSubtype = (subtype) ->
+  subtypes[subtype.name] = subtype
+  subtypes[subtype.uri] = subtype
+
+checkOp = type.checkValidOp = (op) ->
+  # I really want to use ES6 Set for these :p
+  numPickSlots = numDropSlots = 0
+  pickedSlots = {}
+  droppedSlots = {}
+
+  check = (branch) ->
+    assert typeof(branch) == 'object'
+    assert k in ['p', 'd', 'di', 'e', 'o', 'l'] for k, v of branch
+    # TODO: Invariant: embedded ops have a known type & are valid.
+
+    hasChildren = branch.d? || branch.di != undefined || branch.p != undefined
+
+    if (slot = branch.p)?
+      assert !pickedSlots[slot]
+      pickedSlots[slot] = true
+      numPickSlots++
+
+    if (slot = branch.d)?
+      assert !droppedSlots[slot]
+      droppedSlots[slot] = true
+      numDropSlots++
+
+    if op.o
+      assert isObject op.o
+      for k, child of op.o
+        hasChildren = yes; check child
+    if op.l
+      assert isObject op.l
+      for k, child of op.l
+        hasChildren = yes; check child
+
+    # Invariant: There are no empty leaves.
+    assert hasChildren
+
   # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
   # Invariant: Slot names start from 0 and they're contiguous.
+  assert.equal numPickSlots, numDropSlots
+  for i in [0...numPickSlots]
+    assert pickedSlots[i]
+    assert droppedSlots[i]
+
+  return
+
+setO = (obj, key, value) ->
+  if value is undefined
+    delete obj[key]
+  else
+    obj[key] = value
+
+setA = (arr, idx, value) ->
+  if value is undefined
+    arr.splice idx, 1
+  else
+    arr[idx] = value
+
+type.apply = (snapshot, op) ->
+  # snapshot is a regular JSON object. It gets consumed in the process of
+  # making the new object. (So we don't need to clone). I'm not 100% sure this
+  # is the right choice... immutable stuff is super nice.
+  #
+  # ????
+  
+  held = []
+  # Phase 1: Pick.
+  pick = (subDoc, subOp) ->
+    if isObject(subDoc) and subOp.o then for k, opChild of subOp.o
+      docChild = subDoc[k]
+      #console.log 'descending', subDoc, subOp, k, docChild, opChild
+      setO subDoc, k, pick docChild, opChild
+
+    if Array.isArray(subDoc) and subOp.l
+      keys = sortedKeys subOp.l
+      for i in keys by -1
+        setA subDoc, i, pick subDoc[i], subOp.l[i]
+
+    if subOp.p != undefined
+      held[subOp.p] = subDoc if subOp.p?
+      return undefined
+
+    return subDoc
+
+  snapshot = pick snapshot, op
 
 
+  # Phase 2: Drop
+  drop = (subDoc, subOp) ->
+    if subOp.di != undefined
+      console.warn 'Overwriting a subtree. You should have deleted it' if subDoc != undefined
+      subDoc = clone subOp.di
+    else if subOp.d?
+      console.warn 'Overwriting a subtree. You should have deleted it' if subDoc != undefined
+      subDoc = held[subOp.d]
 
+    if isObject(subDoc) and subOp.o then for k, opChild of subOp.o
+      docChild = subDoc[k]
+      setO subDoc, k, drop docChild, opChild
 
+    if Array.isArray(subDoc) and subOp.l
+      keys = sortedKeys subOp.l
+      for i in keys
+        replacement = drop subDoc[i], subOp.l[i]
+        if hasDrop(subOp.l[i])
+          subDoc.splice i, 0, replacement
+        else
+          # Otherwise ... nothing?
+          assert.strictEqual replacement, subDoc[i]
+
+    return subDoc
+
+  snapshot = drop snapshot, op
+
+  return snapshot
 
 
 LEFT = 0
 RIGHT = 1
-
-# This function takes a sparse list object (l:{1:..., 5:...} and returns a
-# sorted list of the keys [1,5,...]
-sortedKeys = (list) -> if list then (+x for x of list).sort (a, b) -> a - b else []
 
 # This function returns a function which maps a list position through an
 # operation. keys is the l: property of the other op, and list must be
@@ -76,9 +219,8 @@ addLChild = (dest, key, child) ->
     dest.l[key] = child
   return dest
 
-hasDrop = (op) -> op && (op.d? || op.di != undefined)
-
-transform = (oldOp, otherOp, direction) ->
+transform = type.transform = (oldOp, otherOp, direction) ->
+  assert direction in ['left', 'right']
   side = if direction == 'left' then LEFT else RIGHT
   debug = transform.debug
 
@@ -289,9 +431,5 @@ if require.main == module
 
 
 #  xf op, other, PICK_PHASE | DROP_PHASE
-
-
-module.exports =
-  transform: transform
 
 
