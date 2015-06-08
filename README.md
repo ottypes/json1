@@ -9,11 +9,14 @@ a work in progress for a few years. It is written to replace
 
 The full spec is listed in [spec.md](spec.md).
 
+The type itself is self contained in [json1.coffee](json1.coffee). I'll migrate
+the code to pure javascript and remove all the other experimental junk in this
+repo when its a bit closer to being ready.
 
 
 ## License
 
-Copyright (c) 2013-2015, Joseph Gentle <me@josephg.com>
+Copyright (c) 2013-2015, Joseph Gentle &lt;me@josephg.com&gt;
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
