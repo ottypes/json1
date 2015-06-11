@@ -285,61 +285,6 @@ xfDrop = (opKeys, op, otherKeys, otherOp, side) ->
     
     otherIdx + offset
 
-###
-keys1 =
-  0: {di:'x'}
-  1: {di:'x'}
-  4: {di:'x'}
-  5: {di:'x'}
-
-keys2 =
-  0: {di:'x'}
-  1: {di:'x'}
-  5: {di:'x'}
-  6: {di:'x'}
-###
-
-###
-keys1 =
-  0: {di:'x'}
-  2: {di:'x'}
-
-keys2 =
-  1: {p:null}
-###
-
-###
-keys1 =
-  1: {di:'hi'}
-keys2 =
-  0: {p:null}
-###
-
-# 1:{},2:{}         -> 0,1,2
-# 1:{p:null},2:{}   -> 0,2,3
-# 1:{p:null, di:{},2:{}} -> 0,(1),2
-# 1:{di:{}},2:{} -> 0,(1),1
-#
-# ???
-
-###
-keys1 =
-  1: {di:'x'}
-keys2 =
-  1: {p:null, di:'other'}
-
-type.debug = true
-f1 = xfDrop sortedKeys(keys1), keys1, sortedKeys(keys2), keys2, RIGHT
-f2 = xfDrop sortedKeys(keys2), keys2, sortedKeys(keys1), keys1, LEFT
-for i in [0...5]
-  console.log i, f1(i)
-console.log '-------'
-for i in [0...5]
-  console.log i, f2(i)
-
-return
-###
-
 addOChild = (dest, key, child) ->
   if child?
     dest ?= {}
@@ -543,9 +488,6 @@ if require.main == module
   type.debug = true
   #console.log transform op1, op2, 'left'
 
-  #transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
-  #console.log transform {"l":{"0":{"di":"a"},"2":{"di":"b"}}}, {"l":{"1":{"p":null}}}, 'left'
-  #console.log transform {"l":{"3":{"di":"hi"}}}, {"l":{"2":{"p":null}}}, 'left'
   console.log transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
 
 
