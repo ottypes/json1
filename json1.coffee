@@ -97,6 +97,8 @@ checkOp = type.checkValidOp = (op) ->
     if op.l
       assert isObject op.l
       for k, child of op.l
+        assert.equal (+k)|0, k
+        assert +k >= 0
         hasChildren = yes; check child
 
     # Invariant: There are no empty leaves.
@@ -186,22 +188,68 @@ type.apply = (snapshot, op) ->
 LEFT = 0
 RIGHT = 1
 
+# This function does an inverse map of list drop positions to figure out what
+# the index is in the original document.
+#
+# So, if you have an op which does 10:pick, 20:drop it'll map the index 20 ->
+# 21 because thats where the drop would have been if the pick didn't happen.
+xfListReverse = (keys, list) ->
+  pickKeyPos = dropKeyPos = 0
+  pickOffset = dropOffset = 0
+
+  prevDestIdx = -1 # for debugging
+
+  cursor = {raw:0, offset:0}
+ 
+  (destIdx) ->
+    assert destIdx >= prevDestIdx
+    prevDestIdx = destIdx
+
+    while dropKeyPos < keys.length and (k = keys[dropKeyPos]) < destIdx
+      dropKeyPos++
+      dropOffset++ if list[k].d? or (list[k].di != undefined)
+
+    d2 = destIdx - dropOffset
+    assert d2 >= 0
+
+    while pickKeyPos < keys.length and (k = keys[pickKeyPos]) - pickOffset <= d2
+      break if k - pickOffset == d2 and hasDrop(list[k])
+      pickKeyPos++
+      pickOffset++ if list[k].p != undefined
+
+    #return pickOffset - dropOffset
+    #return {raw:d2 + pickOffset, o:dropOffset}
+    cursor.raw = d2 + pickOffset
+    cursor.offset = dropOffset - pickOffset
+
+    #console.log "#{destIdx} do #{dropOffset} po #{pickOffset} final #{cursor.raw}"
+    return cursor
+
+
 # This function returns a function which maps a list position through an
 # operation. keys is the l: property of the other op, and list must be
 # sortedKeys(keys).
 #
 # The returned function is called with an index. The passed index must be >=
 # any previously passed index.
-xfMap = (keys, list) ->
+xfMap = (keys, list, pickSide) ->
+  assert pickSide in [0, 1]
+
   pickKeyPos = dropKeyPos = 0
   pickOffset = dropOffset = 0
 
-  (src, pickSide, dropSide) ->
+  lastSrc = -1 # for debugging
+
+  (src, dropSide) ->
+    assert dropSide in [0, 1]
+    assert src >= lastSrc
+    lastSrc = src
+
     while pickKeyPos < keys.length and ((k = keys[pickKeyPos]) < src || (pickSide == RIGHT && k == src))
       pickKeyPos++
-      pickOffset-- if list[k].p != undefined
+      pickOffset++ if list[k].p != undefined
 
-    src2 = src + pickOffset
+    src2 = src - pickOffset
     #while dropKeyPos < keys.length and (k = keys[dropKeyPos]) < src2 + dropOffset
     while dropKeyPos < keys.length
       k = keys[dropKeyPos]
@@ -209,26 +257,88 @@ xfMap = (keys, list) ->
       break if dropSide is RIGHT and k > src2 + dropOffset
 
       dropKeyPos++
-      dropOffset++ if list[k].d? or (list[k].di != undefined)
+      dropOffset++ if hasDrop list[k]
 
     return src2 + dropOffset
 
 
-# This function does an inverse map of list drop positions via the pick list.
-# So, if you have an op which does 10:pick, 20:drop it'll map the index 20 ->
-# 21 because thats where the drop would have been if the pick didn't happen.
-xfListReversePick = (keys, list) ->
-  keyPos = 0
-  offset = 0
+# This function calls uses xfListReverse and xfMap to translate drop positions
+# in the current op to calculate:
+# - The corresponding drop position in the other op
+# - The final index
+xfDrop = (opKeys, op, otherKeys, otherOp, side) ->
+  toRaw = xfListReverse opKeys, op
+  rawToOther = xfMap otherKeys, otherOp, LEFT
+  cursor = {otherIdx:0, finalIdx:0}
 
-  (destIdx) ->
-    while keyPos < keys.length and (k = keys[keyPos]) <= destIdx + offset
-      keyPos++
-      offset++ if list[k].p != undefined
+  (opIdx) ->
+    iHaveDrop = hasDrop op[opIdx]
 
-    return offset
+    {raw:rawIdx, offset} = toRaw opIdx
+    otherIdx = rawToOther rawIdx, (if iHaveDrop then side else RIGHT)
 
+    console.log "#{side} #{opIdx} -> #{rawIdx} do: #{offset} -> #{otherIdx} (#{otherIdx + offset})" if type.debug
 
+    cursor.otherIdx = if iHaveDrop then null else otherIdx
+    cursor.finalIdx = otherIdx + offset
+    console.log cursor if type.debug
+    
+    otherIdx + offset
+
+###
+keys1 =
+  0: {di:'x'}
+  1: {di:'x'}
+  4: {di:'x'}
+  5: {di:'x'}
+
+keys2 =
+  0: {di:'x'}
+  1: {di:'x'}
+  5: {di:'x'}
+  6: {di:'x'}
+###
+
+###
+keys1 =
+  0: {di:'x'}
+  2: {di:'x'}
+
+keys2 =
+  1: {p:null}
+###
+
+###
+keys1 =
+  1: {di:'hi'}
+keys2 =
+  0: {p:null}
+###
+
+# 1:{},2:{}         -> 0,1,2
+# 1:{p:null},2:{}   -> 0,2,3
+# 1:{p:null, di:{},2:{}} -> 0,(1),2
+# 1:{di:{}},2:{} -> 0,(1),1
+#
+# ???
+
+###
+keys1 =
+  1: {di:'x'}
+keys2 =
+  1: {p:null, di:'other'}
+
+type.debug = true
+f1 = xfDrop sortedKeys(keys1), keys1, sortedKeys(keys2), keys2, RIGHT
+f2 = xfDrop sortedKeys(keys2), keys2, sortedKeys(keys1), keys1, LEFT
+for i in [0...5]
+  console.log i, f1(i)
+console.log '-------'
+for i in [0...5]
+  console.log i, f2(i)
+
+return
+###
 
 addOChild = (dest, key, child) ->
   if child?
@@ -247,7 +357,7 @@ addLChild = (dest, key, child) ->
 transform = type.transform = (oldOp, otherOp, direction) ->
   assert direction in ['left', 'right']
   side = if direction == 'left' then LEFT else RIGHT
-  debug = transform.debug
+  debug = type.debug
 
   checkOp oldOp
   checkOp otherOp
@@ -304,13 +414,13 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         otherK = sortedKeys other.l
 
         # Iterate through children, adjusting indexes as needed.
-        otherMap = xfMap otherK, other.l
+        otherMap = xfMap otherK, other.l, side
 
         for idx, i in opK
           oldChild = list[idx]
           otherChild = other.l[idx]
           if (child = pick oldChild, otherChild)
-            newIdx = otherMap idx, side, RIGHT
+            newIdx = otherMap idx, RIGHT
             dest = addLChild dest, newIdx, child
       else
         # Just go through normally - no transform of indexes needed.
@@ -374,18 +484,8 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       opKeys = sortedKeys opList
       otherKeys = sortedKeys otherList
 
-      # Map from raw index -> transformed index
-      rawToOtherMap = xfMap otherKeys, otherList
-
-      # I'm surprised this is needed. We need to transform the other map's
-      # indexes too!
-      rawToOpMap = xfMap opKeys, opList
-
-      # Map from drop index in op -> raw index offset
-      opToRawOffset = xfListReversePick opKeys, opList
-
-      # Map from drop index in other -> raw index offset
-      otherToRawOffset = xfListReversePick otherKeys, otherList
+      opToOther = xfDrop opKeys, opList, otherKeys, otherList, side
+      otherToOp = xfDrop otherKeys, otherList, opKeys, opList, 1-side
 
       opI = otherI = 0
 
@@ -394,35 +494,28 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         opChild = otherChild = null
 
         if a
-          opKey = opKeys[opI]
-          opRawOffset = opToRawOffset opKey
-          opRaw = opKey + opRawOffset
-          opIdx = rawToOtherMap(opRaw, LEFT, side) - opRawOffset
+          opFinalIdx = opToOther (opKey = opKeys[opI])
           opChild = opList[opKey]
-          console.log 'opRaw', opRaw, 'op', opList[opKey] if debug
 
         if b
-          otherKey = otherKeys[otherI]
-          otherRawOffset = otherToRawOffset otherKey
-          otherRaw = otherKey + otherRawOffset
-          otherIdx = rawToOpMap(otherRaw, LEFT, 1-side) - otherRawOffset
-          console.log 'otherRaw', otherRaw, 'other', otherList[otherKey] if debug
+          otherFinalIdx = otherToOp (otherKey = otherKeys[otherI])
           otherChild = otherList[otherKey]
 
         if opChild && otherChild
           # See if we can knock one off.
-          if opIdx < otherIdx then otherChild = null
-          else if opIdx > otherIdx then opChild = null
+          if opFinalIdx < otherFinalIdx then otherChild = null
+          else if opFinalIdx > otherFinalIdx then opChild = null
           else
-            assert.equal opIdx, otherIdx
-            # Hmm... maybe one is an insert.
-            otherChild = null if hasDrop opChild
-            opChild = null if hasDrop otherChild
-            assert opChild || otherChild
+            #console.log opFinalIdx, otherFinalIdx, opChild, otherChild
+            assert !hasDrop(opChild) && !hasDrop(otherChild)
+
+
+          assert !hasDrop(opChild) || !hasDrop(otherChild)
+          assert opChild || otherChild
 
         opI++ if opChild
         otherI++ if otherChild
-        xfIdx = if opChild then opIdx else otherIdx
+        xfIdx = if opChild then opFinalIdx else otherFinalIdx
 
         console.log 'list descend', xfIdx, opChild, otherChild if debug
         child = drop dest?.l?[xfIdx], opChild, otherChild
@@ -447,10 +540,13 @@ transform = type.transform = (oldOp, otherOp, direction) ->
 
 
 if require.main == module
-  transform.debug = true
+  type.debug = true
   #console.log transform op1, op2, 'left'
 
-  transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
+  #transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
+  #console.log transform {"l":{"0":{"di":"a"},"2":{"di":"b"}}}, {"l":{"1":{"p":null}}}, 'left'
+  #console.log transform {"l":{"3":{"di":"hi"}}}, {"l":{"2":{"p":null}}}, 'left'
+  console.log transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
 
 
 

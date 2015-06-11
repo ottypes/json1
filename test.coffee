@@ -6,7 +6,7 @@ type = require './json1'
 # Transform tests
 
 printRepro = (op1, op2, direction, expect) ->
-  console.error 'Repro with:'
+  console.error 'FAIL! Repro with:'
   console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
 
 
@@ -57,7 +57,7 @@ describe 'json1', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
       if expect != undefined then expectLeft = expectRight = expect
 
-      transform.debug = debug
+      type.debug = !!debug
 
       try
         #printRepro op1, op2, 'left', expectLeft
@@ -273,7 +273,18 @@ describe 'json1', ->
         op1: {l:{2:{o:{x:{di:"hi"}}}}}
         expect: null
 
+      it 'transforms against inserts in my own list', ->
+        xf #[0,1,2,3] -> [a,0,b,1,2,3...]
+          op1: {l:{0:{di:'a'}, 2:{di:'b'}}}
+          op2: {l:{1:{p:null}}}
+          expect: {l:{0:{di:'a'}, 2:{di:'b'}}}
 
+        ###
+        xf #[0,1,2,3] -> ['a', 0, 'b', 'c', 1, 2, 3...]
+          op1: {l:{0:{di:'a'}, 2:{di:'b'}, 3:{di:'c'}}}
+          op2: {l:{1:{p:null, di:'X'}}}
+          expect: {l:{0:{di:'a'}, 2:{di:'b'}, 3:{di:'c'}}}
+        ###
 ###
         op1:
           l:
