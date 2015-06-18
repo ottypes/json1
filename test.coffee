@@ -12,44 +12,79 @@ printRepro = (op1, op2, direction, expect) ->
 
 
 describe 'json1', ->
+  describe 'checkOp', ->
+    pass = (op) -> type.checkValidOp op
+    fail = (op) -> assert.throws -> type.checkValidOp op
+
+    it 'allows some simple valid ops', ->
+      pass null
+      pass {e:"hi"}
+      pass {di:[1,2,3]}
+      pass {p:null}
+      pass {o:{x:{p:0}, y:{d:0}}}
+      pass {l:{0:{p:0}, 10:{d:0}}}
+      pass {o:{x:{p:0}, y:{d:0}, a:{p:1}, b:{d:1}}}
+
+    it 'throws if there is any empty leaves', ->
+      fail {}
+      fail {o:{}}
+      fail {o:{x:{}}}
+      fail {l:{}}
+      fail {l:{0:{}}}
+
+    it 'throws if there are mismatched pickups / drops', ->
+      fail {p:0}
+      fail {d:0}
+      fail {o:x:p:0}
+      fail {l:10:p:0}
+      fail {o:x:d:0}
+      fail {l:10:d:0}
+
+    it 'throws if pick/drop indexes dont start at 0', ->
+      fail {o:{x:{p:1}, y:{d:1}}}
+      fail {l:{0:{p:1}, 10:{d:1}}}
+
+
+# ****** Apply ******
+
   describe 'apply', ->
-    apply = ({doc:snapshot, op, expected}) ->
+    apply = ({doc:snapshot, op, expect}) ->
       snapshot = type.apply snapshot, op
-      assert.deepEqual snapshot, expected
+      assert.deepEqual snapshot, expect
 
     it 'Can set properties', ->
       apply
         doc: null
         op: {di:5}
-        expected: 5
+        expect: 5
         
       apply
         doc: []
-        op: {l:1:{di:17}}
-        expected: [17]
+        op: {l:0:{di:17}}
+        expect: [17]
 
       apply
         doc: {}
         op: {o:{x:{di:5}}}
-        expected: {x:5}
+        expect: {x:5}
 
     it 'can move', ->
       apply
         doc: {x:5}
         op: {o:{x:{p:0}, y:{d:0}}}
-        expected: {y:5}
+        expect: {y:5}
 
       apply
         doc: [0,1,2]
         op: {l:{1:{p:0}, 2:{d:0}}}
-        expected: [0,2,1]
+        expect: [0,2,1]
 
     describe 'complex list index stuff', ->
       it 'sdaf', ->
         apply
           doc: [0,1,2,3,4,5]
           op: {l:{1:{p:null, di:11}, 2:{p:null, di:12}}}
-          expected: [0,11,12,3,4,5]
+          expect: [0,11,12,3,4,5]
 
         
 
@@ -145,13 +180,13 @@ describe 'json1', ->
         expect: null # It was already deleted.
 
       it 'move vs delete', -> xf
-        op1: {o:{y:{o:{a:{p:1}, b:{d:1}}}}}
+        op1: {o:{y:{o:{a:{p:0}, b:{d:0}}}}}
         op2: {o:{y:{p:null}}}
         expect: null
 
       it 'delete parent of a move', -> xf
         # obj.a = obj.x.a; delete obj.y;
-        op1: {o:{x:{p:null, o:{a:{p:1}}}, a:{d:1}}}
+        op1: {o:{x:{p:null, o:{a:{p:0}}}, a:{d:0}}}
         op2: {o:{x:{o:{a:{p:0}, b:{d:0}}}}}
         expect: {o:{x:{p:null, o:{b:{p:0}}}, a:{d:0}}}
 

@@ -75,10 +75,14 @@ checkOp = type.checkValidOp = (op) ->
 
   check = (branch) ->
     assert typeof(branch) == 'object'
+    return if branch is null
     assert k in ['p', 'd', 'di', 'e', 'o', 'l'] for k, v of branch
     # TODO: Invariant: embedded ops have a known type & are valid.
 
-    hasChildren = branch.d? || branch.di != undefined || branch.p != undefined
+    hasChildren = branch.d? ||
+      branch.di != undefined ||
+      branch.p != undefined ||
+      branch.e
 
     if (slot = branch.p)?
       assert !pickedSlots[slot]
@@ -90,13 +94,13 @@ checkOp = type.checkValidOp = (op) ->
       droppedSlots[slot] = true
       numDropSlots++
 
-    if op.o
-      assert isObject op.o
-      for k, child of op.o
+    if branch.o
+      assert isObject branch.o
+      for k, child of branch.o
         hasChildren = yes; check child
-    if op.l
-      assert isObject op.l
-      for k, child of op.l
+    if branch.l
+      assert isObject branch.l
+      for k, child of branch.l
         assert.equal (+k)|0, k
         assert +k >= 0
         hasChildren = yes; check child
@@ -104,7 +108,10 @@ checkOp = type.checkValidOp = (op) ->
     # Invariant: There are no empty leaves.
     assert hasChildren
 
-  # Invariant: Every pick has a corresponding drop. Every drop has a corresponding pick.
+  check op
+
+  # Invariant: Every pick has a corresponding drop.
+  #   Every drop has a corresponding pick.
   # Invariant: Slot names start from 0 and they're contiguous.
   assert.equal numPickSlots, numDropSlots
   for i in [0...numPickSlots]
@@ -453,10 +460,6 @@ transform = type.transform = (oldOp, otherOp, direction) ->
           else
             #console.log opFinalIdx, otherFinalIdx, opChild, otherChild
             assert !hasDrop(opChild) && !hasDrop(otherChild)
-
-
-          assert !hasDrop(opChild) || !hasDrop(otherChild)
-          assert opChild || otherChild
 
         opI++ if opChild
         otherI++ if otherChild
