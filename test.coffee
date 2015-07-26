@@ -44,6 +44,14 @@ describe 'json1', ->
       fail {o:{x:{p:1}, y:{d:1}}}
       fail {l:{0:{p:1}, 10:{d:1}}}
 
+    it.skip 'does not allow ops to overwrite their own di data', ->
+      fail {di:{x:5}, o:{x:{di:6}}}
+      fail {di:["hi"], l:{0:{di:"omg"}}}
+
+    it.skip 'does not allow immediate data directly parented in other immediate data', ->
+      fail {di:{}, o:{x:{di:5}}}
+      fail {di:[], l:{0:{di:5}}}
+
 
 # ****** Apply ******
 
@@ -86,7 +94,82 @@ describe 'json1', ->
           op: {l:{1:{p:null, di:11}, 2:{p:null, di:12}}}
           expect: [0,11,12,3,4,5]
 
-        
+
+# ******* Compose *******
+
+  describe.skip 'compose', ->
+    compose = ({op1, op2, expect}) ->
+      result = type.compose op1, op2
+      assert.deepEqual result, expect
+
+
+    it 'composes empty ops to nothing', ->
+      compose
+        op1: null
+        op2: null
+        expect: null
+
+    it 'composes null and another op to that other op', ->
+      t = (op) ->
+        compose {op1:op, op2:null, expect:op}
+        compose {op1:null, op2:op, expect:op}
+
+      t {o:{x:{p:0}, y:{d:0}}}
+      t {l:{1:{p:0}, 2:{d:0}}}
+
+    it 'gloms together unrelated edits', ->
+      compose
+        op1: {o:{x:{p:0}, y:{d:0}}}
+        op2: {o:{a:{p:0}, b:{d:0}}}
+        expect: {o:{x:{p:0}, y:{d:0}, a:{p:1}, b:{d:1}}}
+
+      compose
+        op1: {l:{2:{di:"hi"}}}
+        op2: {l:{0:{o:{x:{p:null}}}}}
+        expect: {l:{0:{o:{x:{p:null}}},2:{di:"hi"}}}
+
+    it 'matches op1.dest -> op2.source', ->
+      compose
+        op1: {o:{x:{p:0}, y:{d:0}}}
+        op2: {o:{y:{p:0}, z:{d:0}}}
+        expect: {o:{x:{p:0}, z:{d:0}}}
+
+    it 'translates drops in objects', ->
+      compose
+        op1: {o:{x:{o:{a:{p:0}, b:{d:0}}}}} # x.a -> x.b
+        op2: {o:{x:{p:0}, y:{d:0}}} # x -> y
+        expect: {o:{x:{p:0,o:{a:{p:1}}}, y:{d:0,o:{b:{d:1}}}}} # x.a -> y.b, x -> y
+
+    it 'untranslates picks in objects', ->
+      compose
+        op1: {o:{x:{p:0}, y:{d:0}}} # x -> y
+        op2: {o:{y:{o:{a:{p:0}}}, z:{d:0}}} # y.a -> z
+        expect: {o:{x:{p:0, o:{a:{p:1}}}, y:{d:0}, z:{d:1}}} # x.a -> z, x -> y
+
+    it 'di gets carried wholesale', ->
+      compose
+        op1: {o:{x:{di:"hi there"}}}
+        op2: {o:{x:{p:0}, y:{d:0}}} # x -> y
+        expect: {o:{y:{di:"hi there"}}}
+
+    it 'di gets edited by the op', ->
+      compose
+        op1: {o:{x:{di:{a:1, b:2, c:3}}}}
+        op2: {o:{x:{o:{a:{p:0}}}, y:{d:0}}}
+        expect: {o:{x:{di:{b:2, c:3}}, y:{di:1}}}
+
+    it 'merges mutual dis', ->
+      compose
+        op1: {di:{}}
+        op2: {o:{x:{di:"hi"}}}
+        expect: {di:{x:"hi"}}
+
+    # TODO: List nonsense.
+
+    # TODO: Edits.
+
+
+# ****** Transform ******
 
   describe 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
