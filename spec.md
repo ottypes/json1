@@ -2,14 +2,14 @@
 
 > This is a draft document. Anything here could still change.
 
-The JSON OT type is designed to allow arbitrary concurrent edits in a JSON document. The document must be a tree - no nodes can be repeated. If you serialize the document to JSON and back, it should be identical.
+The JSON OT type is designed to allow arbitrary concurrent edits in a JSON document. The document must be a tree - each object can appear only once in the tree. If you serialize the document to JSON and back, it should be identical.
 
-The JSON OT type replaces the JSON0 OT type. Once this type is working, JSON0 will be deprecated. We'll write functions to automatically convert JSON0 ops to JSON ops.
+The JSON1 OT type will replace the JSON0 OT type. Once this type is working, JSON0 will be deprecated. We'll write functions to automatically convert JSON0 ops to JSON1 ops.
 
 Unlike the [big table of operations](https://github.com/ottypes/json0/blob/master/README.md#summary-of-operations) in JSON0, the new OT type will only support essential three operation components:
 
-- Pick up subtree
-- Place subtree
+- Pick up subtree / remove subtree
+- Place subtree / insert subtree
 - Edit embedded object using an operation from another OT type.
 
 When you pick up a subtree, it can be placed somewhere else or it could be discarded. When you place a subtree, it can come from somewhere else in the document or it could be an immediate literal value.
@@ -35,17 +35,15 @@ tldr; After a lot of thinking I think we can have a replacement type which is si
 
 ## Operations
 
-The tree is actually a compact form describing three phases:
+The tree is actually a compact form describing three phases. Conceptually, the phases are executed on the document in order:
 
 1. **Pick up phase**: In the pickup phase we take subtrees out of the document. They are either put in a temporary holding area or discarded.
-2. **Drop phase**: In the drop phase we insert new subtrees in the document. These subtrees either come from the holding area (from the pickup phase) or they're literal values in the operation. The drop phase must place every item from the holding area back into the document.
+2. **Drop phase**: In the drop phase we insert new subtrees in the document. These subtrees either come from the holding area (from the pickup phase) or they're literals in the operation. The drop phase must place every item from the holding area back into the document.
 3. **Edit phase**: In the edit phase we make changes to embedded documents in the tree.
 
-> The timing on the edit phase is sort of weird. The edit can't happen in the middle because we need to be able to express editing a subdocument while moving it. So it needs to be at the start or the end. But it really could be either.
+The operation itself looks like a single traversal, but the traversal is actually executed multiple times. During the pick up phase, we only look at pick ups & removes. During the drop phase we only look at drops and inserts, and during the edit phase we only look at edits.
 
-The three phases are all compacted into an operation tree which mirrors the structure of the actual document. I do this because most moves will be local. It doesn't make sense to repeat the walk out to a node in two separate phase sections in the op.
-
-Just like JSON0, when you edit a list, the list is spliced. So for example, if you have a list with `[1,2,3]` and discard the second element, the list will become `[1,3]`. If you then insert 5 at the start of the list, the list will become `[5,1,3]`.
+Just like JSON0, when you edit a list, the list is spliced. So for example, if you have a list with `[1,2,3]` and discard the second element, the list will become `[1,3]`. If you then insert 5 at the start of the list, the list will become `[5,1,3]`. If you don't want this behaviour, use an object.
 
 ### Some examples.
 
@@ -55,32 +53,32 @@ Given a document of:
 
 #### Insert z:6:
 
-    {o:{z:{di:6}}}
+    ['z', {i:6}]
 
-Translation: Descend into the `o`-bject properties. Decend into key `z`. In the drop phase insert immediate value 6.
+Translation: Descend into key 'z'. In the drop phase insert immediate value 6.
 
 #### Rename doc.x to be doc.z:
 
-    {o:{x:{p:0}, z:{d:0}}}
+
+    [['x',{p:0}], ['z',{d:0}]]
 
 Translation: Descend into the object properties. Pick up the `x` subtree and put it in slot 0. Go to the `z` subtree and place the contents of slot 0.
 
 #### Move x into the list between 'happy' and 'apple'
 
-    {o:{x:{p:0}, y:{l:{1:{d:0}}}}
+    [['x',{p:0}], ['y',1,{d:0}]]
 
-Translation: Descend into the object properties. Pick up `x` and put it in slot 0. Descend into the list in the y subtree. At position 1, place the item in slot 0.
+Translation: Descend into `x`. Pick up the value and put it in slot 0. Descend into the y subtree. At position 1, place the item in slot 0.
 
 
 ## Parts of an operation
 
 An operation is a tree. Each node in the tree mirrors a location in the document itself when the operation is being applied. At the root of the tree (and each second level) the tree can have the following keys:
 
-- **o** (object descent): Descend into the object at the current position.
-- **l** (list descent): Descend into the list at the current position
-- **p** (pickup): During the pickup phase, pick up the subtree from this position and put it in the specified slot. If the slot is null, throw the tree away. Eg `p:10` or `p:null`.
+- **p** (pickup): During the pickup phase, pick up the subtree from this position and put it in the specified slot. Eg `p:10`.
+- **r** (remove): During the pickup phase, remove the subtree at the current position.
 - **d** (drop): During the drop phase, insert the subtree in the specified slot here. Eg `d:10`.
-- **di** (drop immediate): During the drop phase, insert the immediate value here. Eg `di:"cabbage"`
+- **i** (insert): During the drop phase, insert the immediate value here. Eg `di:"cabbage"`
 - **e** (edit): Apply the specified edit to the subdocument that is here. Eg `e:{type:…, op:…}`
 
 Most nodes simply contain descents into their children, so the tree ends up being this sort of alternating 2 level affair. For example, to pick up `x.y.z` an operation would have `{o:{x:{o:{y:{o:{z:{p:0}}}}}}}`. It feels pretty silly, and I'm sure there's a cleaner answer. I'm doing it this way because its important to know whether we're descending into a list or an object during transform. (And we might descend into both during different phases of the operation if an object is replaced with a list). I'd love some suggestions on better ways to express this.
@@ -93,10 +91,10 @@ The pickup phase does a post-order traversal of the tree (items are picked up af
 For example, given the document `{x: {y: {}}}`, this operation will capitalize the keys (x->X, y->Y):
 
 ```
-{o: {
-    x: {p: 0, o: {y: {p: 1}}},
-    X: {d: 0, o: {Y: {d: 1}}}
-}
+[
+  ['x',{p:0},'y',{p:1}],
+  ['X',{d:0},'Y',{d:1}]
+]
 ```
 
 Note that for *Y* the data is picked up at `x.y` and dropped at `X.Y`.
@@ -126,18 +124,20 @@ Note that the ordering is the same for *drop immediate* (`di:..`) operation comp
 Convert the document {x:10,y:20,z:30} to an array [10,20,30]:
 
 ```
-{ o: { x: { p: 0 }, y: { p: 1 }, z: { p: 2 } },
-  p: null,
-  di: [],
-  l: { '0': { d: 0 }, '1': { d: 1 }, '2': { d: 2 } } }
+[
+  {r:{},i:[]},
+  ['x',{p:0}],['y',{p:1}],['z',{p:2}],
+  [0,{d:0}],[1,{d:1}],[2,{d:2}]
+]
 ```
 
 Rewrite the document {x:{y:{secret:"data"}}} as {y:{x:{secret:"data"}}}:
 
 ```
-{ o: 
-   { x: { o: { y: { p: 0 } } },
-     y: { di: { x: {} }, o: { x: { d: 0 } } } } }
+[
+  ['x',[{r:{}}, ['y', {p:0}]]],
+  ['y',[{i:{}}, ['x', {d:0}]]]
+]
 ```
 
 (Translation: Go into x.y and pick up the data (slot 0). Set doc.y = {}. Set doc.y.x = data (slot 0).)

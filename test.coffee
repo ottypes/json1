@@ -180,6 +180,12 @@ describe 'json1', ->
         op: [[1, r:{}, i:11], [2, r:{}, i:12]]
         expect: [0,11,12,3,4,5]
 
+    it 'correctly handles interspersed descent and edits', ->
+      apply
+        doc: {x: {y: {}}}
+        op: [['X',{d:0},'Y',{d:1}], ['x',{p:0},'y',{p:1}]]
+        expect: {X: {Y: {}}}
+
 
 # ******* Compose *******
 

@@ -202,20 +202,22 @@ type.apply = (snapshot, op) ->
     else
       container = subDoc
       key = descent[0]
+      subDoc = subDoc?[key]
       i = 1
 
     while i < descent.length and !Array.isArray descent[i]
       d = descent[i]
+      #console.log 'd', d, i, subDoc, container, key
       if typeof d is 'object'
         if hasPick d
           assert subDoc != undefined
-          held[d.p] = subDoc[key] if d.p?
+          held[d.p] = subDoc if d.p?
           removeChild container, key
           container = null
       else
         container = subDoc
         key = d
-        subDoc = subDoc[d]
+        subDoc = subDoc?[d]
 
       i++
 
@@ -244,10 +246,12 @@ type.apply = (snapshot, op) ->
     else
       container = subDoc
       key = descent[0]
+      subDoc = subDoc?[key]
       i = 1
 
     while i < descent.length
       d = descent[i]
+      #console.log 'd', d, i, subDoc, container, key
 
       if Array.isArray d
         drop subDoc, d, false
@@ -259,7 +263,7 @@ type.apply = (snapshot, op) ->
       else
         container = subDoc
         key = d
-        subDoc = subDoc[d]
+        subDoc = subDoc?[d]
       
       i++
 
