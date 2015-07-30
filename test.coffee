@@ -218,7 +218,11 @@ describe 'json1', ->
         op: [{es:[2,"maghe"]}]
         expect: "ermagherd"
 
-    it 'can edit subdocuments using an embedded type'
+    it 'can edit subdocuments using an embedded type', ->
+      apply
+        doc: {str:'hai'}
+        op: [{e:{position:2, text:'wai'}, et:'simple'}]
+        expect: {str:'hawaii'}
 
 # ******* Compose *******
 

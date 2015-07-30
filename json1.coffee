@@ -94,8 +94,7 @@ getType = (component) ->
   else
     return null
 
-getOp = (component) ->
-  return component.es || component.et || component.e
+getOp = (component) -> return component.es || component.en || component.e
 
 checkOp = type.checkValidOp = (op) ->
   #console.log 'check', op
@@ -197,11 +196,6 @@ checkOp = type.checkValidOp = (op) ->
 
   #console.log '---> ok', op
 
-applyEdit = (snapshot, op, typeName) ->
-  type = subtypes[typeName]
-  throw Error "Subtype #{typeName} not found" unless type
-  return type.apply snapshot, op
-
 type.apply = (snapshot, op) ->
   # snapshot is a regular JSON object. It gets consumed in the process of
   # making the new object. (So we don't need to clone). I'm not 100% sure this
@@ -287,10 +281,11 @@ type.apply = (snapshot, op) ->
           subDoc = insertChild container, key, held[d.d]
         else if d.i != undefined
           subDoc = insertChild container, key, d.i
-        else if d.e
-          console.log 'eeeedddiiitttt', d
-        else if d.es
-          subDoc = insertChild container, key, applyEdit subDoc, d.es, 'text'
+        else if (type = getType d)
+          replacement = type.apply subDoc, getOp d
+          subDoc = insertChild container, key, replacement
+        else if d.e != undefined
+          throw Error "Subtype #{d.et} undefined"
       else
         container = subDoc
         key = d
