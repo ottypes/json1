@@ -153,6 +153,8 @@ describe 'json1', ->
         fail [{e:{}, et:'simple', es:[1,2,3]}]
         # + the edits for numbers.
 
+      it 'does not allow anything inside an edited subtree'
+
 # ****** Apply ******
 
   describe 'apply', ->
@@ -328,90 +330,79 @@ describe 'json1', ->
 
     it 'foo', ->
       xf
-        op1: o:
-          x:{o:{a:{p:0}, b:{d:0}}}
-          y:{o:{a:{p:1}, b:{d:1}}}
-        op2: {o:{x:{r:{}}}}
-        expect: o:
-          y:{o:{a:{p:0}, b:{d:0}}}
+        op1: [
+          ['x', ['a', {p:0}], ['b', {d:0}]],
+          ['y', ['a', {p:1}], ['b', {d:1}]]
+        ]
+        op2: ['x', {r:true}]
+        expect: ['y', ['a', {p:0}], ['b', {d:0}]]
 
-    it 'delete the source of a move', -> xf
-      op1: {o:{x:{p:0}, y:{d:0}}}
-      op2: {o:{x:{r:{}}}}
+    it 'deletes the source of a move', -> xf
+      op1: [['x', p:0], ['y', d:0]]
+      op2: ['x', r:true]
       expect: null
-
 
     describe 'object edits', ->
       it 'can move an edit', -> xf
-        op1: {o:{x:{e:'edit'}}}
-        op2: {o:{x:{p:0}, y:{d:0}}}
-        expect: {o:{y:{e:'edit'}}}
+        op1: ['x', es:['hi']]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: ['y', es:['hi']]
 
       it 'can reparent with some extra junk', -> xf
-        op1: {o:{x:{p:0}, y:{d:0}}}
-        op2:
-          o:
-            x:
-              p:0
-              o:
-                a: {p:1}
-            _x: {d:0}
-            _a: {d:1}
-
-        expect: {o:{_x:{p:0}, y:{d:0}}}
+        op1: [['x', p:0], ['y', d:0]]
+        op2: [
+          ['_x', d:0]
+          ['_a', d:1]
+          ['x', p:0, 'a', p:1]
+        ]
+        op1: [['_x', p:0], ['y', d:0]]
 
       it 'can move the source of a pickup', -> xf
-        op1:
-          o:
-            x:
-              p:0
-              o:
-                a: {p:1}
-            _x: {d:0}
-            _a: {d:1}
-        op2: {o:{x:{p:0}, y:{d:0}}}
+        op1: [
+          ['_x', d:0]
+          ['_a', d:1]
+          ['x', p:0, 'a', p:1]
+        ]
+        op2: [['x', p:0], ['y', d:0]]
 
-        expect:
-          o:
-            y:
-              p:0
-              o:
-                a: {p:1}
-            _x: {d:0}
-            _a: {d:1}
+        expect: [
+          ['_x', d:0]
+          ['_a', d:1]
+          ['y', p:0, 'a', p:1]
+        ]
 
       it 'obeys symmetry', -> xf
-        op1: {o:{x:{i:"one"}}}
-        op2: {o:{x:{i:"two"}}}
-        expectLeft: {o:{x:{i:"one"}}}
+        op1: ['x', i:'one']
+        op2: ['x', i:'two']
+        expectLeft: ['x', i:'one']
         expectRight: null
 
       it 'delete vs delete', -> xf
-        op2: {o:{a:{r:{}}}}
-        op1: {o:{a:{r:{}}}}
+        op1: ['a', r:true]
+        op2: ['a', r:true]
         expect: null # It was already deleted.
 
       it 'move vs delete', -> xf
-        op1: {o:{y:{o:{a:{p:0}, b:{d:0}}}}}
-        op2: {o:{y:{r:{}}}}
+        op1: ['y', ['a', p:0], ['b', d:0]]
+        op2: ['y', r:true]
         expect: null
 
       it 'delete parent of a move', -> xf
-        # obj.a = obj.x.a; delete obj.y;
-        op1: {o:{x:{r:{}, o:{a:{p:0}}}, a:{d:0}}}
-        op2: {o:{x:{o:{a:{p:0}, b:{d:0}}}}}
-        expect: {o:{x:{r:{}, o:{b:{p:0}}}, a:{d:0}}}
+        # obj.a = obj.x.a; delete obj.x;
+        op1: [['a', d:0], ['x', r:true, 'a', p:0]]
+        op2: ['x', ['a', p:0], ['b', d:0]]
+        expect: [['a', d:0], ['x', r:true, 'b', p:0]]
 
       it.skip 'deletes follow an escapee', -> xf
-        op2: {o:{x:{o:{a:{p:1}}}, a:{d:1}}}
-        op1: {o:{x:{r:{}}}}
-        expect: {o:{x:{r:{}}, a:{r:{}}}}
+        op1: ['x', r:true]
+        op2: [['a', d:1], ['x', 'a', p:1]]
+        expect: [['a', r:true], ['x', r:true]]
 
     describe 'swap', ->
-      swap =
-        o:
-          a: {p:0, o:{b:{p:1}}}
-          b: {d:1, o:{a:{d:0}}}
+      swap = [
+        ['a', p:0, 'b', p:1]
+        ['b', d:1, 'a', d:0]
+      ]
 
       it 'noop vs swap', -> xf
         op1: null
@@ -419,112 +410,103 @@ describe 'json1', ->
         expect: null
 
       it 'can swap two edits', -> xf
-        op1: {o:{a:{e:'a edit', o:{b:{e:'b edit'}}}}}
+        op1: ['a', [['s', si:['a edit']], ['b', 's', si:['b edit']]]]
         op2: swap
-        expect: {o:{b:{e:'b edit', o:{a:{e:'a edit'}}}}}
-
+        expect: ['b', [['s', si:['b edit']], ['a', 's', si:['a edit']]]]
 
     describe 'lists', ->
-
       it 'can rewrite simple list indexes', -> xf
-        op2: {l:{0:{i:'oh hi'}}}
-        op1: {l:{10:{e:'edit'}}}
-        expect: {l:{11:{e:'edit'}}}
+        op2: [0, i:'oh hi']
+        op1: [10, es:['edit']]
+        expect: [11, es:['edit']]
 
       it 'can change the root from an object to a list', -> xf
-        op1: {o:{a:{e:'edit'}}}
-        op2: {o:{a:{p:0}}, i:[], l:{0:{d:0}}}
-        expect: {l:{0:{e:'edit'}}}
+        op1: ['a', es:['hi']]
+        op2: [{i:[], r:true}, [0, d:0], ['a', p:0]]
+        expect: [0, es:['hi']]
 
       it 'can handle adjacent drops', -> xf
-        op1: {l:{11:{i:1}, 12:{i:2}, 13:{i:3}}}
-        op2: {l:{0:{r:{}}}}
-        expect: {l:{10:{i:1}, 11:{i:2}, 12:{i:3}}}
+        op1: [[11, i:1], [12, i:2], [13, i:3]]
+        op2: [0, r:true]
+        expect: [[10, i:1], [11, i:2], [12, i:3]]
 
       it 'fixes drop indexes correctly 1', -> xf
-        op2: {l:{1:{r:{}}}}
-        op1: l:
-          0: r:{}
-          1: i:'hi'
-        expect: l:
-          0: {r:{}, i:'hi'}
+        op2: [1, r:true]
+        op1: [[0, r:true], [1, i:'hi']]
+        expect: [0, r:true, i:'hi']
 
       it 'list drop vs delete uses the correct result index', ->
         xf
-          op2: {l:{2:{r:{}}}}
-          op1: {l:{2:{i:'hi'}}}
-          expect: {l:{2:{i:'hi'}}}
+          op2: [2, r:true]
+          op1: [2, i:'hi']
+          expect: [2, i:'hi']
 
         xf
-          op2: {l:{2:{r:{}}}}
-          op1: {l:{3:{i:'hi'}}}
-          expect: {l:{2:{i:'hi'}}}
+          op2: [2, r:true]
+          op1: [3, i:'hi']
+          expect: [2, i:'hi']
 
       it 'list drop vs drop uses the correct result index', -> xf
-        op2: {l:{2:{i:'other'}}}
-        op1: {l:{2:{i:'hi'}}}
-        expectLeft: {l:{2:{i:'hi'}}}
-        expectRight: {l:{3:{i:'hi'}}}
+        op2: [2, i:'other']
+        op1: [2, i:'hi']
+        expectLeft: [2, i:'hi']
+        expectRight: [3, i:'hi']
 
       it 'list drop vs delete and drop', ->
         xf
-          op2: {l:{2:{r:{}, i:'other'}}}
-          op1: {l:{2:{i:'hi'}}}
-          expectLeft: {l:{2:{i:'hi'}}}
-          expectRight: {l:{3:{i:'hi'}}}
+          op2: [2, r:true, i:'other']
+          op1: [2, i:'hi']
+          expectLeft: [2, i:'true']
+          expectRight: [3, i:'true']
 
         xf
-          op2: {l:{2:{r:{}}, 3:{i:'other'}}}
-          op1: {l:{3:{i:'hi'}}}
-          expect: {l:{2:{i:'hi'}}}
+          op2: [[2, r:true], [3, i:'other']]
+          op1: [3, i:'hi']
+          expect: [2, i:'hi']
 
         xf
-          op2: {l:{2:{r:{}}, 3:{i:'other'}}}
-          op1: {l:{4:{i:'hi'}}}
-          expectLeft: {l:{3:{i:'hi'}}}
-          expectRight: {l:{4:{i:'hi'}}}
+          op2: [[2, r:true], [3, i:'other']]
+          op1: [4, i:'hi']
+          expectLeft: [3, i:'hi']
+          expectRight: [4, i:'hi']
 
       it 'list delete vs drop', ->
         xf
-          op2: {l:{2:{i:'hi'}}}
-          op1: {l:{1:{r:{}}}}
-          expect: {l:{1:{r:{}}}}
+          op2: [2, i:'hi']
+          op1: [1, r:true]
+          expect: [1, r:true]
 
         xf
-          op2: {l:{2:{i:'hi'}}}
-          op1: {l:{2:{r:{}}}}
-          expect: {l:{3:{r:{}}}}
+          op2: [2, i:'hi']
+          op1: [2, r:true]
+          expect: [3, r:true]
 
         xf
-          op2: {l:{2:{i:'hi'}}}
-          op1: {l:{3:{r:{}}}}
-          expect: {l:{4:{r:{}}}}
+          op2: [2, i:'hi']
+          op1: [3, r:true]
+          expect: [4, r:true]
 
       it 'list delete vs delete', ->
         xf
-          op2: {l:{1:{r:{}}}}
-          op1: {l:{1:{r:{}}}}
+          op2: [1, r:true]
+          op1: [1, r:true]
           expect: null # It was already deleted.
 
       it 'fixes drop indexes correctly 2', -> xf
-        op2: {l:{2:{r:{}}}} # Shouldn't effect the op.
-        op1: l:
-          0: r:{}
-          1: i:'hi'
-        expect: l:
-          0: r:{}
-          1: i:'hi'
+        op2: [2, r:true] # Shouldn't affect the op.
+        op1: [[0, r:true], [1, i:'hi']]
+        expect: [[0, r:true], [1, i:'hi']]
 
       it 'insert vs delete parent', -> xf
-        op2: {l:{2:{r:{}}}} # Shouldn't effect the op.
-        op1: {l:{2:{o:{x:{i:"hi"}}}}}
+        op2: [2, r:true] # Shouldn't affect the op.
+        op1: [2, 'x', i:'hi']
         expect: null
 
       it 'transforms against inserts in my own list', ->
         xf #[0,1,2,3] -> [a,0,b,1,2,3...]
-          op1: {l:{0:{i:'a'}, 2:{i:'b'}}}
-          op2: {l:{1:{r:{}}}}
-          expect: {l:{0:{i:'a'}, 2:{i:'b'}}}
+          op1: [[0, i:'a'], [2, i:'b']]
+          op2: [1, r:true]
+          expect: [[0, i:'a'], [2, i:'b']]
 
         ###
         xf #[0,1,2,3] -> ['a', 0, 'b', 'c', 1, 2, 3...]
