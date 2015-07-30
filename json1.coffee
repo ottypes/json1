@@ -76,12 +76,26 @@ module.exports = type =
   name: 'json1'
 
 subtypes = {}
-type.registerSubtype = (subtype) ->
-  subtypes[subtype.name] = subtype
-  subtypes[subtype.uri] = subtype
+register = type.registerSubtype = (type) ->
+  type = type.type if type.type
+  subtypes[type.name] = type if type.name
+  subtypes[type.uri] = type if type.uri
 
-type.registerSubtype require 'ot-text'
+register require 'ot-text'
 
+
+getType = (component) ->
+  if component.et
+    return subtypes[component.et]
+  else if component.es
+    return subtypes.text
+  else if component.en
+    throw Error 'Not implemented!'
+  else
+    return null
+
+getOp = (component) ->
+  return component.es || component.et || component.e
 
 checkOp = type.checkValidOp = (op) ->
   #console.log 'check', op
@@ -105,9 +119,10 @@ checkOp = type.checkValidOp = (op) ->
 
   checkComponent = (e) ->
     empty = true
+    hasEdit = false
     for k, v of e
       empty = false
-      assert k in ['p', 'r', 'd', 'i', 'e']
+      assert k in ['p', 'r', 'd', 'i', 'e', 'es', 'en', 'et']
       if k is 'p'
         checkNonNegInteger v
         assert !pickedSlots[v]
@@ -120,6 +135,13 @@ checkOp = type.checkValidOp = (op) ->
         droppedSlots[v] = true
         numDropSlots++
         assert e.i is undefined
+      else if k in ['e', 'es', 'en']
+        assert !hasEdit
+        hasEdit = true
+        type = getType e
+        assert type
+        type.checkValidOp? getOp e
+
       # And checks for the edit.
     assert !empty
 
@@ -174,6 +196,11 @@ checkOp = type.checkValidOp = (op) ->
   #console.log numPickSlots, numDropSlots, pickedSlots, droppedSlots
 
   #console.log '---> ok', op
+
+applyEdit = (snapshot, op, typeName) ->
+  type = subtypes[typeName]
+  throw Error "Subtype #{typeName} not found" unless type
+  return type.apply snapshot, op
 
 type.apply = (snapshot, op) ->
   # snapshot is a regular JSON object. It gets consumed in the process of
@@ -260,6 +287,10 @@ type.apply = (snapshot, op) ->
           subDoc = insertChild container, key, held[d.d]
         else if d.i != undefined
           subDoc = insertChild container, key, d.i
+        else if d.e
+          console.log 'eeeedddiiitttt', d
+        else if d.es
+          subDoc = insertChild container, key, applyEdit subDoc, d.es, 'text'
       else
         container = subDoc
         key = d

@@ -25,7 +25,9 @@ printRepro = (op1, op2, direction, expect) ->
 
 
 describe 'json1', ->
-  before -> type.debug = true
+  before ->
+    type.registerSubtype require 'ot-simple'
+    type.debug = true
   after -> type.debug = false
 
   describe 'checkOp', ->
@@ -34,7 +36,8 @@ describe 'json1', ->
 
     it 'allows some simple valid ops', ->
       pass null
-      pass [{e:"hi"}]
+      pass [{es:"hi"}]
+      pass [{e:"hi", et:'simple'}]
       pass [{i:[1,2,3]}]
       pass [{r:{}}]
       pass [['x',{p:0}], ['y',{d:0}]]
@@ -127,6 +130,29 @@ describe 'json1', ->
       fail [[1, r:{}], [2, r:{}], 5, r:{}]
       fail [[1, r:{}], [2, r:{}], r:{}]
 
+    describe 'edit', ->
+      it 'requires all edits to specify their type', ->
+        fail [{e:{}}]
+        fail [5, {e:{}}]
+        pass [{e:{}, et:'simple'}]
+
+      it 'allows edits to have null or false for the operation', ->
+        # These aren't valid operations according to the simple type, but the
+        # type doesn't define a checkValidOp so we wouldn't be able to tell
+        # anyway.
+        pass [{e:null, et:'simple'}]
+        pass [5, {e:null, et:'simple'}]
+        pass [{e:false, et:'simple'}]
+        pass [5, {e:false, et:'simple'}]
+
+      it 'does not allow an edit to use an unregistered type', ->
+        fail [{e:{}, et:'an undefined type'}]
+        fail [{e:null, et:'an undefined type'}]
+
+      it 'does not allow two edits in the same operation', ->
+        fail [{e:{}, et:'simple', es:[1,2,3]}]
+        # + the edits for numbers.
+
 # ****** Apply ******
 
   describe 'apply', ->
@@ -182,10 +208,17 @@ describe 'json1', ->
 
     it 'correctly handles interspersed descent and edits', ->
       apply
-        doc: {x: {y: {}}}
+        doc: {x: {y: {was:'y'}, was:'x'}}
         op: [['X',{d:0},'Y',{d:1}], ['x',{p:0},'y',{p:1}]]
-        expect: {X: {Y: {}}}
+        expect: {X: {Y: {was:'y'}, was:'x'}}
 
+    it 'can edit strings', ->
+      apply
+        doc: "errd"
+        op: [{es:[2,"maghe"]}]
+        expect: "ermagherd"
+
+    it 'can edit subdocuments using an embedded type'
 
 # ******* Compose *******
 
