@@ -28,6 +28,20 @@
 assert = require 'assert'
 
 
+log = module.exports = (args...) ->
+  return if log.quiet
+  {inspect} = require 'util'
+  f = (a) ->
+    if typeof a is 'string'
+      a
+    else
+      inspect a, {depth:5, colors:true}
+  console.log args.map(f).join ' '
+
+log.quiet = false
+
+
+
 isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
 
 clone = (old) ->
@@ -196,6 +210,7 @@ checkOp = type.checkValidOp = (op) ->
 
   #console.log '---> ok', op
 
+
 type.apply = (snapshot, op) ->
   # snapshot is a regular JSON object. It gets consumed in the process of
   # making the new object. (So we don't need to clone). I'm not 100% sure this
@@ -303,8 +318,114 @@ type.apply = (snapshot, op) ->
 
   return snapshot
 
+isGreaterKey = (a, b) ->
+  if typeof(a) is typeof(b)
+    a > b
+  else
+    typeof a is 'string' and typeof b is 'number'
 
 
 
+# Add key->value to the named op.
+writeCursor = (op) ->
+  pendingDescent = []
 
+  # Each time we descend we store the parent and the index of the child.
+  parents = [] # Filling this in is a bit of a hack, needed when the root has multiple children.
+  indexes = []
+
+  # The index of the last listy child we visited, to avoid an n^2
+  lcIdx = -1
+
+  container = op; idx = -1
+
+  activeComponent = null
+
+  assert Array.isArray op
+
+  flushDescent = ->
+    for k in pendingDescent
+      log 'flushDescent', k, container, idx
+      i = idx + 1
+      i++ if i < container.length and isObject(container[i]) # Skip the component here, if any.
+
+      assert i == container.length || !isObject container[i]
+
+      if i == container.length
+        # Just append a child here.
+        log 'strategy: push to the end'
+        container.push k
+        idx = i
+        continue
+
+      else if container[i] == k
+        log 'strategy: traverse right'
+        idx = i
+        continue
+       
+      else if !Array.isArray container[i]
+        # Its not an array. Its not the same as me. I must have a new child! Woohoo!
+        log '(making a child)'
+        oldChild = container.splice i, container.length - i
+        container.push oldChild
+
+      if Array.isArray container[i]
+        log 'strategy: descend'
+        parents.push container
+
+        if lcIdx != -1
+          log 'i', i, 'lcIdx', lcIdx
+          assert isGreaterKey k, container[lcIdx][0]
+          i = lcIdx + 1
+          lcIdx = -1
+
+        i++ while i < container.length and isGreaterKey k, container[i][0]
+        indexes.push i
+        idx = 0
+        if i < container.length and container[i][0] == k
+          container = container[i]
+        else
+          # Insert a new child and descend into it.
+          container.splice i, 0, (child = [k])
+          container = child
+  
+    pendingDescent.length = 0
+
+
+  ascend: ->
+    log 'ascending - c,idx,par', container, idx, parents, indexes
+    if pendingDescent.length
+      pendingDescent.pop()
+    else
+      if idx is 0
+        if parents.length
+          lcIdx = indexes.pop()
+          container = parents.pop()
+          idx = container.length - 1
+          idx-- while idx > 0 and typeof container[idx] is 'object'
+        else
+          log 'dodgy hax ascension'
+          lcIdx = -1
+          idx = -1
+      else
+        idx--
+        idx-- if isObject container[idx]
+    log '->cending - c', container, 'idx', idx, 'lcIdx', lcIdx, parents, indexes
+
+  descend: (key) ->
+    pendingDescent.push key
+
+  write: (key, value) ->
+    # First go to the new path.
+    flushDescent()
+
+    log 'write', key, value
+
+    i = idx + 1
+    if i < container.length and isObject container[i]
+      container[i][key] = value
+    else
+      component = {}
+      component[key] = value
+      container.splice i, 0, component
 
