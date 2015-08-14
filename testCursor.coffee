@@ -1,4 +1,4 @@
-{writeCursor, readCursor} = require './json1'
+{writeCursor, readCursor} = require './cursor'
 assert = require 'assert'
 
 data = require('fs').readFileSync('ops.json', 'utf8').split('\n').filter((x) -> x != '').map(JSON.parse)
