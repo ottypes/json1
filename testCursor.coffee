@@ -1,4 +1,4 @@
-{writeCursor, makeCursor} = require './json1'
+{writeCursor, readCursor} = require './json1'
 assert = require 'assert'
 
 data = require('fs').readFileSync('ops.json', 'utf8').split('\n').filter((x) -> x != '').map(JSON.parse)
@@ -31,7 +31,7 @@ describe 'cursors', ->
 
   describe 'copy using read cursors', ->
     test = (op) ->
-      c = makeCursor op
+      c = readCursor op
       w = writeCursor()
       do f = ->
         if component = c.getComponent()

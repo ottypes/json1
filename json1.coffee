@@ -326,20 +326,33 @@ isGreaterKey = (a, b) ->
 
 
 
-# Add key->value to the named op.
-type.writeCursor = writeCursor = (op = null) ->
-  pendingDescent = []
+makeCursor = (isWrite, op = null) ->
+  if isWrite then pendingDescent = []
 
   # Each time we descend we store the parent and the index of the child.
-  parents = [] # Filling this in is a bit of a hack, needed when the root has multiple children.
+  # The indexes list is appended twice each time we descend - once with the last
+  # key index of the parent, and once with the index of the array we're
+  # descending down.
+  parents = []
   indexes = []
 
-  # The index of the last listy child we visited, to avoid an n^2
+  # The index of the last listy child we visited for write cursors. This is used
+  # to ensure we are traversing the op in order.
   lcIdx = -1
 
+  # The way we handle the root of the op is a big hack - its like that because
+  # the root of an op is different from the rest; it can contain a component
+  # immediately.
+  # Except at the root (which could be null), container will always be a list.
   container = op; idx = -1
 
-  flushDescent = ->
+  get: -> op
+
+  write: (key, value) ->
+    assert isWrite
+    assert.equal parents.length, indexes.length / 2
+
+    # First flush and pending descents.
     if container == null
       op = container = []
 
@@ -368,6 +381,7 @@ type.writeCursor = writeCursor = (op = null) ->
           oldChild = container.splice i, container.length - i
           container.push oldChild
 
+        indexes.push idx
         #log 'strategy: descend'
         parents.push container
 
@@ -389,36 +403,7 @@ type.writeCursor = writeCursor = (op = null) ->
 
     pendingDescent.length = 0
 
-
-  ascend: ->
-    #log 'ascending - c,idx,par', container, idx, parents, indexes
-    if pendingDescent.length
-      pendingDescent.pop()
-    else
-      if idx is 0
-        if parents.length
-          lcIdx = indexes.pop()
-          container = parents.pop()
-          idx = container.length - 1
-          idx-- while idx >= 0 and typeof container[idx] is 'object'
-        else
-          #log 'dodgy hax ascension'
-          lcIdx = 0
-          idx = -1
-      else
-        idx--
-        idx-- if isObject container[idx]
-    #log '->cending - c', container, 'idx', idx, 'lcIdx', lcIdx, parents, indexes
-
-  descend: (key) ->
-    pendingDescent.push key
-
-  write: (key, value) ->
-    # First go to the new path.
-    flushDescent()
-
-    #log 'write', key, value
-
+    # Actually writing is quite easy now.
     i = idx + 1
     if i < container.length and isObject container[i]
       container[i][key] = value
@@ -427,32 +412,38 @@ type.writeCursor = writeCursor = (op = null) ->
       component[key] = value
       container.splice i, 0, component
 
-  get: -> op
+  ascend: ->
+    assert.equal parents.length, indexes.length / 2
+    if isWrite and pendingDescent.length
+      pendingDescent.pop()
+    else
+      if idx is 0
+        if parents.length
+          lcIdx = indexes.pop()
+          container = parents.pop()
+          idx = indexes.pop()
+        else
+          #log 'dodgy hax ascension'
+          lcIdx = 0
+          idx = -1
+      else
+        idx--
+        idx-- if isObject container[idx]
 
+  # Don't use this for read cursors. Instead use descendFirst() and nextSibling()
+  descend: (key) ->
+    assert isWrite
+    pendingDescent.push key
 
-
-
-
-type.makeCursor = makeCursor = (op) ->
-  # Each time we descend we store the parent and the index of the child.
-  # These two lists will both have the same length.
-  parents = []
-  indexes = []
-
-  # The way we handle the root of the op is a big hack - its like that because
-  # the root of an op is different from the rest; it can contain a component
-  # immediately.
-  # Except at the root (which could be null), container will always be a list.
-  container = op; idx = -1
+  # Only valid to call this after descending into a child.
+  getKey: -> container[idx]
 
   getComponent: ->
+    assert !isWrite # It might be possible to make this work in both modes, but eh.
     if container && container.length > idx + 1 && isObject (c = container[idx + 1])
       return c
     else
       return null
-
-  # Only valid to call this after descending into a child.
-  getKey: -> container[idx]
 
   hasChildren: -> container && (idx+1) < container.length &&
           (!isObject(container[idx+1]) || (idx+2) < container.length)
@@ -461,15 +452,10 @@ type.makeCursor = makeCursor = (op) ->
     assert @hasChildren()
     i = idx + 1
     i++ if isObject container[i]
-    # if !container ||
-    #       i >= container.length ||
-    #       (isObject(container[i]) && ++i >= container.length)
-    #   return false
-
     firstChild = container[i]
     if Array.isArray firstChild
+      indexes.push idx
       parents.push container
-      assert !isNaN(i)
       indexes.push i
       idx = 0
       container = firstChild
@@ -477,42 +463,26 @@ type.makeCursor = makeCursor = (op) ->
       idx = i
 
   nextSibling: ->
-    # console.log 'nextSibling', container, idx
     # children are inline or we're at the root
-    # console.log 'ns parents is null' if parents.length is 0
-    # console.log 'idx not 0' if idx > 0
     return false if idx > 0 or parents.length is 0
-    assert parents.length == indexes.length
+    assert.equal parents.length, indexes.length / 2
     i = indexes[indexes.length - 1] + 1
     c = parents[parents.length - 1]
-    # console.log "i(#{i}) >= c.length(#{c.length})" if i >= c.length
     return false if i >= c.length # Past the end of the listy children
     assert !isNaN(i)
     indexes[indexes.length - 1] = i
     container = c[i]
     # idx = 0 # But it should be zero anyway...
-    # console.log '->xtSibling', container, idx
     return true
 
-  ascend: ->
-    assert.equal parents.length, indexes.length
-    if idx is 0
-      if parents.length
-        indexes.pop()
-        container = parents.pop()
-        idx = container.length - 1
-        idx-- while idx >= 0 and typeof container[idx] is 'object'
-      else
-        # log 'dodgy hax ascension'
-        idx = -1
-    else
-      idx--
-      idx-- if isObject container[idx]
+type.writeCursor = writeCursor = (op) -> makeCursor true, op
+type.readCursor = readCursor = (op) -> makeCursor false, op
+
 
 
 printOp = (op) ->
   console.log op
-  c = makeCursor op
+  c = readCursor op
   w = writeCursor()
   do f = ->
     if component = c.getComponent()
