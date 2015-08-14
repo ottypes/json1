@@ -118,7 +118,7 @@ checkOp = type.checkValidOp = (op) ->
   numPickSlots = numDropSlots = 0
   pickedSlots = {}
   droppedSlots = {}
-  
+
   checkNonNegInteger = (n) ->
     assert typeof n is 'number'
     assert n >= 0
@@ -167,7 +167,7 @@ checkOp = type.checkValidOp = (op) ->
     last = SCALAR
     numDescents = 0
     lastKey = 0
-    
+
     for d in descent
       assert d?
 
@@ -305,7 +305,7 @@ type.apply = (snapshot, op) ->
         container = subDoc
         key = d
         subDoc = subDoc?[d]
-      
+
       i++
 
     if isRoot
@@ -327,7 +327,7 @@ isGreaterKey = (a, b) ->
 
 
 # Add key->value to the named op.
-writeCursor = (op) ->
+type.writeCursor = writeCursor = (op = null) ->
   pendingDescent = []
 
   # Each time we descend we store the parent and the index of the child.
@@ -339,13 +339,12 @@ writeCursor = (op) ->
 
   container = op; idx = -1
 
-  activeComponent = null
-
-  assert Array.isArray op
-
   flushDescent = ->
+    if container == null
+      op = container = []
+
     for k in pendingDescent
-      log 'flushDescent', k, container, idx
+      #log 'flushDescent', k, container, idx
       i = idx + 1
       i++ if i < container.length and isObject(container[i]) # Skip the component here, if any.
 
@@ -353,28 +352,27 @@ writeCursor = (op) ->
 
       if i == container.length
         # Just append a child here.
-        log 'strategy: push to the end'
+        #log 'strategy: push to the end'
         container.push k
         idx = i
-        continue
 
       else if container[i] == k
-        log 'strategy: traverse right'
+        #log 'strategy: traverse right'
         idx = i
-        continue
-       
-      else if !Array.isArray container[i]
-        # Its not an array. Its not the same as me. I must have a new child! Woohoo!
-        log '(making a child)'
-        oldChild = container.splice i, container.length - i
-        container.push oldChild
 
-      if Array.isArray container[i]
-        log 'strategy: descend'
+      else
+
+        if !Array.isArray container[i]
+          # Its not an array. Its not the same as me. I must have a new child! Woohoo!
+          #log '(making a child)'
+          oldChild = container.splice i, container.length - i
+          container.push oldChild
+
+        #log 'strategy: descend'
         parents.push container
 
         if lcIdx != -1
-          log 'i', i, 'lcIdx', lcIdx
+          #log 'i', i, 'lcIdx', lcIdx
           assert isGreaterKey k, container[lcIdx][0]
           i = lcIdx + 1
           lcIdx = -1
@@ -388,12 +386,12 @@ writeCursor = (op) ->
           # Insert a new child and descend into it.
           container.splice i, 0, (child = [k])
           container = child
-  
+
     pendingDescent.length = 0
 
 
   ascend: ->
-    log 'ascending - c,idx,par', container, idx, parents, indexes
+    #log 'ascending - c,idx,par', container, idx, parents, indexes
     if pendingDescent.length
       pendingDescent.pop()
     else
@@ -402,15 +400,15 @@ writeCursor = (op) ->
           lcIdx = indexes.pop()
           container = parents.pop()
           idx = container.length - 1
-          idx-- while idx > 0 and typeof container[idx] is 'object'
+          idx-- while idx >= 0 and typeof container[idx] is 'object'
         else
-          log 'dodgy hax ascension'
-          lcIdx = -1
+          #log 'dodgy hax ascension'
+          lcIdx = 0
           idx = -1
       else
         idx--
         idx-- if isObject container[idx]
-    log '->cending - c', container, 'idx', idx, 'lcIdx', lcIdx, parents, indexes
+    #log '->cending - c', container, 'idx', idx, 'lcIdx', lcIdx, parents, indexes
 
   descend: (key) ->
     pendingDescent.push key
@@ -419,7 +417,7 @@ writeCursor = (op) ->
     # First go to the new path.
     flushDescent()
 
-    log 'write', key, value
+    #log 'write', key, value
 
     i = idx + 1
     if i < container.length and isObject container[i]
@@ -429,3 +427,185 @@ writeCursor = (op) ->
       component[key] = value
       container.splice i, 0, component
 
+  get: -> op
+
+
+
+
+
+type.makeCursor = makeCursor = (op) ->
+  # Each time we descend we store the parent and the index of the child.
+  # These two lists will both have the same length.
+  parents = []
+  indexes = []
+
+  # The way we handle the root of the op is a big hack - its like that because
+  # the root of an op is different from the rest; it can contain a component
+  # immediately.
+  # Except at the root (which could be null), container will always be a list.
+  container = op; idx = -1
+
+  getComponent: ->
+    if container && container.length > idx + 1 && isObject (c = container[idx + 1])
+      return c
+    else
+      return null
+
+  # Only valid to call this after descending into a child.
+  getKey: -> container[idx]
+
+  hasChildren: -> container && (idx+1) < container.length &&
+          (!isObject(container[idx+1]) || (idx+2) < container.length)
+
+  descendFirst: ->
+    assert @hasChildren()
+    i = idx + 1
+    i++ if isObject container[i]
+    # if !container ||
+    #       i >= container.length ||
+    #       (isObject(container[i]) && ++i >= container.length)
+    #   return false
+
+    firstChild = container[i]
+    if Array.isArray firstChild
+      parents.push container
+      assert !isNaN(i)
+      indexes.push i
+      idx = 0
+      container = firstChild
+    else
+      idx = i
+
+  nextSibling: ->
+    # console.log 'nextSibling', container, idx
+    # children are inline or we're at the root
+    # console.log 'ns parents is null' if parents.length is 0
+    # console.log 'idx not 0' if idx > 0
+    return false if idx > 0 or parents.length is 0
+    assert parents.length == indexes.length
+    i = indexes[indexes.length - 1] + 1
+    c = parents[parents.length - 1]
+    # console.log "i(#{i}) >= c.length(#{c.length})" if i >= c.length
+    return false if i >= c.length # Past the end of the listy children
+    assert !isNaN(i)
+    indexes[indexes.length - 1] = i
+    container = c[i]
+    # idx = 0 # But it should be zero anyway...
+    # console.log '->xtSibling', container, idx
+    return true
+
+  ascend: ->
+    assert.equal parents.length, indexes.length
+    if idx is 0
+      if parents.length
+        indexes.pop()
+        container = parents.pop()
+        idx = container.length - 1
+        idx-- while idx >= 0 and typeof container[idx] is 'object'
+      else
+        # log 'dodgy hax ascension'
+        idx = -1
+    else
+      idx--
+      idx-- if isObject container[idx]
+
+
+printOp = (op) ->
+  console.log op
+  c = makeCursor op
+  w = writeCursor()
+  do f = ->
+    if component = c.getComponent()
+      console.log 'component', component
+      w.write k, v for k, v of component
+
+    return unless c.hasChildren()
+    console.log 'down'
+    c.descendFirst()
+    loop
+      console.log "key: #{c.getKey()}"
+      w.descend c.getKey()
+      f c
+      w.ascend()
+      break unless c.nextSibling()
+    c.ascend()
+    console.log 'up'
+
+  console.log JSON.stringify op
+  console.log JSON.stringify w.get()
+
+printOp [["x",["a",{"p":0}],["b",{"d":0}]],["y",["a",{"p":1}],["b",{"d":1}]]]
+return
+
+eachChildOf = (c1, c2, listMap, fn) ->
+  finished1 = c1.descendFirst()
+  finished2 = c2.descendFirst()
+
+  while !finished1 || !finished2
+    k1 = if !finished1 then c1.getKey() else null
+    k2 = if !finished2 then c2.getKey() else null
+
+    if k1 != null and k2 != null
+      if isGreaterKey k2, k1
+        k2 = null
+      else if k1 != k2
+        k1 = null
+
+    fn (if k1 == null then k2 else k1), (c1 if k1 != null), (c2 if k2 != null)
+    finished1 = c1.nextSibling() if k1 != null
+    finished2 = c2.nextSibling() if k2 != null
+
+  c1.ascend()
+  c2.ascend()
+
+
+LEFT = 0
+RIGHT = 1
+
+transform = type.transform = (oldOp, otherOp, direction) ->
+  assert direction in ['left', 'right']
+  side = if direction == 'left' then LEFT else RIGHT
+  debug = type.debug
+
+  checkOp oldOp
+  checkOp otherOp
+
+  if debug
+    console.log "transforming #{direction}:"
+    console.log 'op', JSON.stringify(oldOp, null, 2)
+    console.log 'op2', JSON.stringify(otherOp, null, 2)
+
+  held = [] # Indexed by op2's slots.
+  slotMap = [] # Map from oldOp's slots -> op's slots.
+
+  newOp = writeCursor()
+
+  pick = (c1, c2) ->
+    #return null if !op?
+
+    # op is a list.
+
+
+
+    component = c1.getComponent()
+    if component.r
+      return
+    else if component.p?
+      hold cursor
+
+    eachChildOf c1, c2, xfMap, (key) ->
+      return if c1.inDarkDepthsOfUnknowing()
+      newOp.descend key
+      pick c1, c2
+      newOp.ascend()
+
+  cursor1 = cursor op1
+  cursor2 = cursor op2
+  pick cursor1, cursor2
+
+
+
+
+  console.log '---- pick phase ----' if debug
+
+  return newOp.get()
