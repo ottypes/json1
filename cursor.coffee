@@ -51,13 +51,13 @@ makeCursor = (op = null) ->
       else
         return null
 
-    hasChildren: -> container && (idx+1) < container.length &&
-            (!isObject(container[idx+1]) || (idx+2) < container.length)
-
     descendFirst: ->
-      # Only valid to call this if hasChildren() returns true.
-      assert @hasChildren()
       i = idx + 1
+
+      # Only valid to call this if hasChildren() returns true.
+      return false if !container || i >= container.length ||
+              (isObject(container[i]) && (i+1) >= container.length)
+
       i++ if isObject container[i]
       firstChild = container[i]
       if Array.isArray firstChild
@@ -68,6 +68,7 @@ makeCursor = (op = null) ->
         container = firstChild
       else
         idx = i
+      return true
 
     nextSibling: ->
       # children are inline or we're at the root
@@ -161,5 +162,46 @@ makeCursor = (op = null) ->
       else
         ascend()
 
+    writeTree: (data) ->
+      return if data is null
+      assert Array.isArray data
+      depth = 0
+      for c in data
+        if typeof c in ['string', 'number']
+          depth++
+          @descend c
+        else if Array.isArray c
+          @writeTree c
+        else if typeof c is 'object'
+          @write k, v for k, v of c
+      @ascend() for [0...depth]
+
 exports.writeCursor = (op) -> makeCursor(op).write()
 exports.readCursor = (op) -> makeCursor(op).read()
+
+exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
+  hasChild1 = descended1 = c1?.descendFirst()
+  hasChild2 = descended2 = c2?.descendFirst()
+
+  while hasChild1 || hasChild2
+    k1 = if hasChild1 then c1.getKey() else null
+    k2 = if hasChild2 then c2.getKey() else null
+
+    k1 = listMap1 k1 if listMap1 && typeof k1 is 'number'
+    k2 = listMap2 k2 if listMap2 && typeof k2 is 'number'
+
+    # console.log 'k1k2', k1, k2
+
+    if k1 != null and k2 != null
+      if isGreaterKey k2, k1
+        k2 = null
+      else if k1 != k2
+        k1 = null
+
+    # fn key, c1 or null, c2 or null
+    fn (if k1 == null then k2 else k1), (c1 if k1 != null), (c2 if k2 != null)
+    hasChild1 = c1.nextSibling() if k1 != null and hasChild1
+    hasChild2 = c2.nextSibling() if k2 != null and hasChild2
+
+  c1.ascend() if descended1
+  c2.ascend() if descended2

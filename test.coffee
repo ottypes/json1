@@ -8,7 +8,7 @@
 #
 # This is more complicated than the current system. It works like this:
 # - The operation is a list.
-# - 
+# -
 
 
 assert = require 'assert'
@@ -104,6 +104,8 @@ describe 'json1', ->
       fail ['x', ['b', {r:{}}], ['a', {r:{}}]]
       fail ['x', [10, {r:{}}], [5, {r:{}}]]
       fail ['x', ['a', {r:{}}], [5, {r:{}}]]
+      fail ['x', ['a', {r:{}}], ['a', {r:{}}]]
+      fail ['x', [10, {r:{}}], [10, {r:{}}]]
 
     it 'throws if descents start with the same scalar', ->
       fail ['x', ['a', {r:{}}], ['a', {e:{}}]]
@@ -183,7 +185,7 @@ describe 'json1', ->
         doc: null
         op: [{i:5}]
         expect: 5
-        
+
       apply
         doc: {x:5}
         op: [r:{}, i:[1,2,3]]
@@ -191,12 +193,13 @@ describe 'json1', ->
 
       # TODO: And an edit of the root.
 
-    it 'can move', ->
+    it 'can move 1', ->
       apply
         doc: {x:5}
         op: [['x', p:0], ['y', d:0]]
         expect: {y:5}
 
+    it 'can move 2', ->
       apply
         doc: [0,1,2]
         op: [[1, p:0], [2, d:0]]
@@ -302,7 +305,7 @@ describe 'json1', ->
 
 # ****** Transform ******
 
-  describe.skip 'transform', ->
+  describe.only 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
       if expect != undefined then expectLeft = expectRight = expect
 

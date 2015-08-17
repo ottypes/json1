@@ -47,7 +47,7 @@ isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
 clone = (old) ->
   return null if old is null
 
-  if Array.isArray o
+  if Array.isArray old
     l = new Array old.length
     l[i] = v for v, i in old
     return l
@@ -83,7 +83,26 @@ insertChild = (container, key, value) ->
 
   return value
 
-{readCursor, writeCursor} = require './cursor'
+
+setO = (obj, key, value) ->
+  if value is undefined
+    delete obj[key]
+  else
+    obj[key] = value
+
+setA = (arr, idx, value) ->
+  if value is undefined
+    arr.splice idx, 1
+  else
+    arr[idx] = value
+
+setC = (container, key, value) ->
+  if typeof key is 'number'
+    setA container, key, value
+  else
+    setO container, key, value
+
+{readCursor, writeCursor, eachChildOf} = require './cursor'
 
 # *********
 
@@ -321,26 +340,6 @@ type.apply = (snapshot, op) ->
 
   return snapshot
 
-eachChildOf = (c1, c2, listMap, fn) ->
-  finished1 = c1.descendFirst()
-  finished2 = c2.descendFirst()
-
-  while !finished1 || !finished2
-    k1 = if !finished1 then c1.getKey() else null
-    k2 = if !finished2 then c2.getKey() else null
-
-    if k1 != null and k2 != null
-      if isGreaterKey k2, k1
-        k2 = null
-      else if k1 != k2
-        k1 = null
-
-    fn (if k1 == null then k2 else k1), (c1 if k1 != null), (c2 if k2 != null)
-    finished1 = c1.nextSibling() if k1 != null
-    finished2 = c2.nextSibling() if k2 != null
-
-  c1.ascend()
-  c2.ascend()
 
 
 LEFT = 0
@@ -356,40 +355,92 @@ transform = type.transform = (oldOp, otherOp, direction) ->
 
   if debug
     console.log "transforming #{direction}:"
-    console.log 'op', JSON.stringify(oldOp, null, 2)
-    console.log 'op2', JSON.stringify(otherOp, null, 2)
+    console.log 'op', JSON.stringify(oldOp)
+    console.log 'op2', JSON.stringify(otherOp)
 
   held = [] # Indexed by op2's slots.
   slotMap = [] # Map from oldOp's slots -> op's slots.
 
-  newOp = writeCursor()
+  pick = (o1, o2, w) ->
+    return if !o1?
+    # other can be null when we're copying
 
-  pick = (c1, c2) ->
-    #return null if !op?
+    if (c2 = o2?.getComponent())
+      # console.log 'found c2', c2
+      return if c2.r != undefined
+      w = writeCursor() if c2.p?
 
-    # op is a list.
+    # Copy in the component from c1
+    if (c1 = o1.getComponent())
+      # console.log 'found component', c1
+      w.write 'r', c1.r if c1.r != undefined
+      if c1.p?
+        slot = slotMap.length
+        slotMap[c1.p] = slot
+        w.write 'p', slot
+      w.write 'e', clone(c1.e) if c1.e
+      w.write 'es', clone(c1.es) if c1.es
 
+    # Now descend through our children
+    eachChildOf o1, o2, null, null, (key, o1, o2) ->
+      console.log 'descending to', key, !!o1, !!o2
+      w.descend key
+      pick o1, o2, w
+      w.ascend()
+      console.log 'ascending    ', key
 
-
-    component = c1.getComponent()
-    if component.r
-      return
-    else if component.p?
-      hold cursor
-
-    eachChildOf c1, c2, xfMap, (key) ->
-      return if c1.inDarkDepthsOfUnknowing()
-      newOp.descend key
-      pick c1, c2
-      newOp.ascend()
-
-  cursor1 = cursor op1
-  cursor2 = cursor op2
-  pick cursor1, cursor2
-
-
-
+    if c2 && (slot = c2.p)?
+      held[slot] = w.get()
 
   console.log '---- pick phase ----' if debug
+  w = writeCursor()
+  pick readCursor(oldOp), readCursor(otherOp), w
 
-  return newOp.get()
+  drop = (o1, o2, w) ->
+    assert o1 or o2
+
+    # No early return here because nested somewhere in o2 might be a drop.
+    # console.log 'drop', dest, op, other if debug
+
+    c1 = o1.getComponent() if o1
+    c2 = o2.getComponent() if o2
+
+    # The other op deletes everything in this subtree anyway.
+    return if c2?.r != undefined
+
+    if c1 && (c1.i != undefined || (c1.d? and slotMap[c1.d]?))
+      if !hasDrop(c2) || side == LEFT
+        # console.log 'write'
+        w.write 'd', slotMap[c1.d] if c1.d?
+        w.write 'i', clone(c1.i) if c1.i != undefined
+
+    if c2 && (slot = c2.d)?
+      _w = w
+      w = writeCursor held[slot]
+      console.log 'dropping', held[slot]
+      delete held[slot] # For debugging
+
+    eachChildOf o1, o2, null, null, (key, o1, o2) ->
+      console.log 'descending to', key
+      w.descend key
+      drop o1, o2, w
+      w.ascend()
+      console.log 'ascending    ', key
+
+    if c2 && (slot = c2.d)?
+      console.log 'writeTree', w.get()
+      _w.writeTree w.get()
+
+  console.log '---- drop phase ----' if debug
+  console.log held, slotMap
+
+  # We'll need a fresh cursor for the next traversal
+  w = writeCursor w.get()
+  drop readCursor(oldOp), readCursor(otherOp), w
+
+  console.log '---- end phase ----' if debug
+  console.log held, slotMap
+  return w.get()
+
+# type.debug = true
+# console.log transform ["x",{"i":"one"}], ["x",{"i":"two"}], 'left'

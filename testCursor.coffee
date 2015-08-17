@@ -39,8 +39,7 @@ describe 'cursors', ->
           w.write k, v for k, v of component
 
         # console.log 'down'
-        return if !c.hasChildren()
-        c.descendFirst()
+        return if !c.descendFirst()
         loop
           # console.log "key: #{c.getKey()}"
           w.descend c.getKey()
