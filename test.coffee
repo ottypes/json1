@@ -354,23 +354,22 @@ describe 'json1', ->
       it 'can reparent with some extra junk', -> xf
         op1: [['x', p:0], ['y', d:0]]
         op2: [
-          ['_x', d:0]
           ['_a', d:1]
+          ['_x', d:0]
           ['x', p:0, 'a', p:1]
         ]
-        op1: [['_x', p:0], ['y', d:0]]
+        expect: [['_x', p:0], ['y', d:0]]
 
       it 'can move the source of a pickup', -> xf
         op1: [
-          ['_x', d:0]
           ['_a', d:1]
+          ['_x', d:0]
           ['x', p:0, 'a', p:1]
         ]
         op2: [['x', p:0], ['y', d:0]]
-
         expect: [
-          ['_x', d:0]
           ['_a', d:1]
+          ['_x', d:0]
           ['y', p:0, 'a', p:1]
         ]
 
@@ -413,9 +412,9 @@ describe 'json1', ->
         expect: null
 
       it 'can swap two edits', -> xf
-        op1: ['a', [['s', si:['a edit']], ['b', 's', si:['b edit']]]]
+        op1: ['a', es:['a edit'], 'b', es:['b edit']]
         op2: swap
-        expect: ['b', [['s', si:['b edit']], ['a', 's', si:['a edit']]]]
+        expect: ['b', es:['b edit'], 'a', es:['a edit']]
 
     describe 'lists', ->
       it 'can rewrite simple list indexes', -> xf
