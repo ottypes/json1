@@ -229,6 +229,12 @@ describe 'json1', ->
         op: [{e:{position:2, text:'wai'}, et:'simple'}]
         expect: {str:'hawaii'}
 
+    it 'applies edits after drops', -> apply
+      doc: {x: "yooo"}
+      op: [['x', p:0], ['y', d:0, es:['sup']]]
+      expect: {y: "supyooo"}
+
+
 # ******* Compose *******
 
   describe.skip 'compose', ->
@@ -374,6 +380,7 @@ describe 'json1', ->
         expectLeft: ['x', i:'one']
         expectRight: null
 
+    describe 'deletes', ->
       it 'delete vs delete', -> xf
         op1: ['a', r:true]
         op2: ['a', r:true]
@@ -395,10 +402,37 @@ describe 'json1', ->
         op2: ['x', ['a', p:0], ['b', d:0]]
         expect: [['a', d:0], ['x', r:true, 'b', p:0]]
 
-      it.skip 'deletes follow an escapee', -> xf
-        op1: ['x', r:true]
-        op2: [['a', d:1], ['x', 'a', p:1]]
-        expect: [['a', r:true], ['x', r:true]]
+      it.skip 'deletes follow an escapee', ->
+        xf
+          # Its unfortunate we need this behaviour both from an implementation and
+          # a usage standpoint. Sadly if we didn't there'd be consequences at
+          # runtime. If you want to avoid this problem, you need to copy out the
+          # data instead (and delete the original).
+          op1: ['x', r:{a:5, b:6}]
+          op2: [['a', d:0], ['x', 'a', p:0]]
+          expect: [['a', r:5], ['x', r:{b:6}]]
+
+        xf # Putting the deleted data in r: is optional. Just default to :true.
+          op1: ['x', r:true]
+          op2: [['a', d:0], ['x', 'a', p:0]]
+          expect: [['a', r:true], ['x', r:true]]
+
+      it.skip 'awful delete nonsense', ->
+        xf
+          op1: [['x', r:{a:5, b:6}], ['y', i:'hi']]
+          op2: [['x', 'a', p:0], ['y', d:0]]
+          expect: [['x', r:{b:5}], ['y', r:5, i:'hi']]
+
+        xf
+          op1: [['x', 'a', p:0], ['y', d:0]]
+          op2: [['x', r:true], ['y', i:'hi']]
+          expect: null
+
+        xf
+          op1: [10, r:[1,2,3]]
+          op2: [[5, d:0], [10, 1, p:0]]
+          expect: [[5, r:2], [11, r:[1,3]]]
+        # And how do those indexes interact with pick / drop operations??
 
     describe 'swap', ->
       swap = [
@@ -521,21 +555,29 @@ describe 'json1', ->
           op2: [1, r:true]
           expect: [[0, i:'a'], [2, i:'b']]
 
-        ###
-        xf #[0,1,2,3] -> ['a', 0, 'b', 'c', 1, 2, 3...]
-          op1: {l:{0:{i:'a'}, 2:{i:'b'}, 3:{i:'c'}}}
-          op2: {l:{1:{r:{}, i:'X'}}}
-          expect: {l:{0:{i:'a'}, 2:{i:'b'}, 3:{i:'c'}}}
-        ###
-###
-        op1:
-          l:
-            1: {p:1}
-            2: {r:{}}
-            3:
-              p: null
-              d: 1
-            4: {r:{}}
-        expect: {}
+    describe 'edit', ->
+      it 'transforms edits by one another', -> xf
+        op1: [1, es:[2, 'hi']]
+        op2: [1, es:['yo']]
+        expect: [1, es:[4, 'hi']]
 
-###
+      it 'copies in ops otherwise', -> xf
+        op1: ['x', {e:{position:2, text:'wai'}, et:'simple'}]
+        op2: ['y', r:true]
+        expect: ['x', {e:{position:2, text:'wai'}, et:'simple'}]
+
+      it 'allows edits at the root', -> xf
+        op1: [{e:{position:2, text:'wai'}, et:'simple'}]
+        op2: [{e:{position:0, text:'omg'}, et:'simple'}]
+        expect: [{e:{position:5, text:'wai'}, et:'simple'}]
+
+      it.skip 'applies edits in the right order', -> xf
+        # Edits happen *after* the drop phase.
+        op1: [1, es:[2, 'hi']]
+        op2: [[1, i:{}], [2, es:['yo']]]
+        expect: [2, es:[4, 'hi']]
+
+      it 'an edit on a deleted object goes away', -> xf
+        op1: [1, es:[2, 'hi']]
+        op2: [1, r:"yo"]
+        expect: null

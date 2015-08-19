@@ -26,21 +26,7 @@
 # - Port to JS.
 
 assert = require 'assert'
-
-
-log = module.exports = (args...) ->
-  return if log.quiet
-  {inspect} = require 'util'
-  f = (a) ->
-    if typeof a is 'string'
-      a
-    else
-      inspect a, {depth:5, colors:true}
-  console.log args.map(f).join ' '
-
-log.quiet = false
-
-
+log = require './log'
 
 isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
 
@@ -130,7 +116,7 @@ getType = (component) ->
   else
     return null
 
-getOp = (component) -> return component.es || component.en || component.e
+getEdit = (component) -> return component.es || component.en || component.e
 
 checkOp = type.checkValidOp = (op) ->
   #console.log 'check', op
@@ -175,7 +161,7 @@ checkOp = type.checkValidOp = (op) ->
         hasEdit = true
         type = getType e
         assert type
-        type.checkValidOp? getOp e
+        type.checkValidOp? getEdit e
 
       # And checks for the edit.
     assert !empty
@@ -252,7 +238,7 @@ type.apply = (snapshot, op) ->
 
   # Phase 1: Pick
   pick = (subDoc, descent, isRoot) ->
-    #console.log 'pick', subDoc, descent, isRoot
+    # console.log 'pick', subDoc, descent, isRoot
     if isRoot
       rootContainer = container = [subDoc]
       key = 0
@@ -265,7 +251,7 @@ type.apply = (snapshot, op) ->
 
     while i < descent.length and !Array.isArray descent[i]
       d = descent[i]
-      #console.log 'd', d, i, subDoc, container, key
+      # console.log 'd', d, i, subDoc, container, key
       if typeof d is 'object'
         if hasPick d
           assert subDoc != undefined
@@ -290,12 +276,12 @@ type.apply = (snapshot, op) ->
 
   pick snapshot, op, true
 
-  #console.log '---- after pick phase ----'
-  #console.log held, snapshot
+  # console.log '---- after pick phase ----'
+  # console.log held, snapshot
 
   # Phase 2: Drop
   drop = (subDoc, descent, isRoot) ->
-    #console.log 'drop', subDoc, descent, isRoot
+    # console.log 'drop', subDoc, descent, isRoot
 
     if isRoot
       rootContainer = container = {s:snapshot}
@@ -309,7 +295,7 @@ type.apply = (snapshot, op) ->
 
     while i < descent.length
       d = descent[i]
-      #console.log 'd', d, i, subDoc, container, key
+      # console.log 'd', d, i, subDoc, container, key
 
       if Array.isArray d
         drop subDoc, d, false
@@ -318,8 +304,9 @@ type.apply = (snapshot, op) ->
           subDoc = insertChild container, key, held[d.d]
         else if d.i != undefined
           subDoc = insertChild container, key, d.i
-        else if (type = getType d)
-          replacement = type.apply subDoc, getOp d
+
+        if (type = getType d)
+          replacement = type.apply subDoc, getEdit d
           subDoc = insertChild container, key, replacement
         else if d.e != undefined
           throw Error "Subtype #{d.et} undefined"
@@ -334,9 +321,6 @@ type.apply = (snapshot, op) ->
       snapshot = rootContainer.s
 
   drop snapshot, op, true
-
-  # Phase 3: Do inline edits. (Although this may be possible during the drop phase)
-  # TODO
 
   return snapshot
 
@@ -368,6 +352,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   pick = (o1, o2, w) ->
     return if !o1?
     # other can be null when we're copying
+    # w will be null if we're in a section that the other op deleted
 
     if (c2 = o2?.getComponent())
       log 'found c2', c2
@@ -375,7 +360,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       w = writeCursor() if c2.p?
 
     # Copy in the component from c1
-    if w and (c1 = o1.getComponent())
+    if w and (c1 = o1?.getComponent())
       log 'found c1', c1, c2
       if c1.p?
         slot = slotMap.length
@@ -383,8 +368,23 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         w.write 'p', slot
       if w
         w.write 'r', c1.r if c1.r != undefined
-        w.write 'e', clone(c1.e) if c1.e
-        w.write 'es', clone(c1.es) if c1.es
+
+        if (t1 = getType c1)
+          e1 = getEdit c1
+          if c2 && (t2 = getType c2)
+            # This might cause problems later. ... eh, later problem.
+            throw Error "Transforming incompatible types" unless t1 == t2
+            e2 = getEdit c2
+            e = t1.transform e1, e2, direction
+          else
+            e = clone e1
+
+          switch t1
+            when subtypes.text then w.write 'es', e
+            # when subtypes.number then write 'en', e
+            else
+              w.write 'et', c1.et # Just copy the nomenclosure
+              w.write 'e', e
 
     # Now descend through our children
     map = listmap.forward getKCList(o2), side, RIGHT
@@ -453,10 +453,10 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   console.log '---- end phase ----' if debug
   log held, slotMap
   result = w.get()
-  log result
+  log '--->', result
   checkOp result
   return result
 
 if require.main == module
   type.debug = true
-  console.log transform [2,{"i":"hi"}], [2,{"r":true,"i":"other"}], 'left'
+  transform [1,{"es":[2,"hi"]}], [[1,{"i":{}}],[2,{"es":["yo"]}]], 'left'
