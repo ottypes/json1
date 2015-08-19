@@ -305,7 +305,7 @@ describe 'json1', ->
 
 # ****** Transform ******
 
-  describe.only 'transform', ->
+  describe 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
       if expect != undefined then expectLeft = expectRight = expect
 
@@ -339,11 +339,6 @@ describe 'json1', ->
         ]
         op2: ['x', {r:true}]
         expect: ['y', ['a', {p:0}], ['b', {d:0}]]
-
-    it 'deletes the source of a move', -> xf
-      op1: [['x', p:0], ['y', d:0]]
-      op2: ['x', r:true]
-      expect: null
 
     describe 'object edits', ->
       it 'can move an edit', -> xf
@@ -389,6 +384,11 @@ describe 'json1', ->
         op2: ['y', r:true]
         expect: null
 
+      it 'deletes the source of a move', -> xf
+        op1: [['x', p:0], ['y', d:0]]
+        op2: ['x', r:true]
+        expect: null
+
       it 'delete parent of a move', -> xf
         # obj.a = obj.x.a; delete obj.x;
         op1: [['a', d:0], ['x', r:true, 'a', p:0]]
@@ -417,10 +417,21 @@ describe 'json1', ->
         expect: ['b', es:['b edit'], 'a', es:['a edit']]
 
     describe 'lists', ->
-      it 'can rewrite simple list indexes', -> xf
-        op2: [0, i:'oh hi']
-        op1: [10, es:['edit']]
-        expect: [11, es:['edit']]
+      it 'can rewrite simple list indexes', ->
+        xf
+          op2: [0, i:'oh hi']
+          op1: [10, es:['edit']]
+          expect: [11, es:['edit']]
+
+        xf
+          op2: [0, i:'oh hi']
+          op1: [10, r:{}]
+          expect: [11, r:{}]
+
+        xf
+          op2: [0, i:'oh hi']
+          op1: [10, i:{}]
+          expect: [11, i:{}]
 
       it 'can change the root from an object to a list', -> xf
         op1: ['a', es:['hi']]
@@ -458,8 +469,8 @@ describe 'json1', ->
         xf
           op2: [2, r:true, i:'other']
           op1: [2, i:'hi']
-          expectLeft: [2, i:'true']
-          expectRight: [3, i:'true']
+          expectLeft: [2, i:'hi']
+          expectRight: [3, i:'hi']
 
         xf
           op2: [[2, r:true], [3, i:'other']]
@@ -500,7 +511,7 @@ describe 'json1', ->
         expect: [[0, r:true], [1, i:'hi']]
 
       it 'insert vs delete parent', -> xf
-        op2: [2, r:true] # Shouldn't affect the op.
+        op2: [2, r:true]
         op1: [2, 'x', i:'hi']
         expect: null
 

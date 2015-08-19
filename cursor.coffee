@@ -205,3 +205,24 @@ exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
 
   c1.ascend() if descended1
   c2.ascend() if descended2
+
+# Only for listy children. Returns null or [keys, components] for numeric key &
+# non-null component pairs.
+exports.getKCList = (cursor) ->
+  return null if !cursor? or !cursor.descendFirst()
+
+  keys = null
+  components = null
+
+  loop
+    key = cursor.getKey()
+    if typeof key is 'number' and (c = cursor.getComponent())
+      if keys is null
+        keys = []
+        components = []
+      keys.push key
+      components.push c
+    break unless cursor.nextSibling()
+  cursor.ascend()
+
+  return if keys is null then null else {keys, components}
