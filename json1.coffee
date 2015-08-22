@@ -88,7 +88,7 @@ setC = (container, key, value) ->
   else
     setO container, key, value
 
-{readCursor, writeCursor, eachChildOf, getKCList} = require './cursor'
+{readCursor, writeCursor} = cursor = require './cursor'
 
 # *********
 
@@ -107,7 +107,9 @@ register require 'ot-text'
 
 
 getType = (component) ->
-  if component.et
+  if !component?
+    return null
+  else if component.et
     return subtypes[component.et]
   else if component.es
     return subtypes.text
@@ -331,132 +333,152 @@ listmap = require './listmap'
 LEFT = 0
 RIGHT = 1
 
+
 transform = type.transform = (oldOp, otherOp, direction) ->
   assert direction in ['left', 'right']
   side = if direction == 'left' then LEFT else RIGHT
   debug = type.debug
   log.quiet = !debug
 
-  checkOp oldOp
-  checkOp otherOp
-
   if debug
     console.log "transforming #{direction}:"
     console.log 'op1', JSON.stringify(oldOp)
     console.log 'op2', JSON.stringify(otherOp)
 
-  held = [] # Indexed by op2's slots.
-  slotMap = [] # Map from oldOp's slots -> op's slots.
+  checkOp oldOp
+  checkOp otherOp
 
-  console.log '---- pick phase ----' if debug
-  pick = (o1, o2, w) ->
-    return if !o1?
-    # other can be null when we're copying
-    # w will be null if we're in a section that the other op deleted
+  # Indexed by op2's slots.
+  heldRead = [] # Read cursor at the place in op1
+  heldTaint = []
 
-    if (c2 = o2?.getComponent())
-      log 'found c2', c2
-      w = null if c2.r != undefined
-      w = writeCursor() if c2.p?
+  nextSlot = 0
+  # slotMap = []
 
-    # Copy in the component from c1
-    if w and (c1 = o1?.getComponent())
-      log 'found c1', c1, c2
-      if c1.p?
-        slot = slotMap.length
-        slotMap[c1.p] = slot
-        w.write 'p', slot
-      if w
-        w.write 'r', c1.r if c1.r != undefined
+  pickComponent = [] # indexed by p1's original slot #
 
-        if (t1 = getType c1)
-          e1 = getEdit c1
-          if c2 && (t2 = getType c2)
-            # This might cause problems later. ... eh, later problem.
-            throw Error "Transforming incompatible types" unless t1 == t2
-            e2 = getEdit c2
-            e = t1.transform e1, e2, direction
-          else
-            e = clone e1
+  otherPickScan = (p1, p2, taint) ->
+    # Scanning the other op looking for the pickup locations.
+    c1 = p1?.getComponent()
+    c2 = p2.getComponent()
 
-          switch t1
-            when subtypes.text then w.write 'es', e
-            # when subtypes.number then write 'en', e
-            else
-              w.write 'et', c1.et # Just copy the nomenclosure
-              w.write 'e', e
+    if (slot = c2?.p)?
+      log slot, c1, c2
+      if p1
+        heldRead[slot] = p1.clone()
+      else
+        heldRead[slot] = null
+      heldTaint[slot] = taint
 
-    # Now descend through our children
-    map = listmap.forward getKCList(o2), side, RIGHT
-    eachChildOf o1, o2, null, null, (key, o1, o2) ->
-      log 'descending to', key, !!o1, !!o2
-      key = map key if typeof key is 'number'
-      w?.descend key
-      pick o1, o2, w
-      w?.ascend()
-      log 'ascending    ', key
+    taint = true if c1?.r
+    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
+      log 'in', key
+      otherPickScan p1, p2, taint if p2
+      log 'out', key
 
-    if c2 && (slot = c2.p)?
-      log 'holding in slot', slot, w.get()
-      held[slot] = w.get()
+  p1 = readCursor oldOp
+  p2 = readCursor otherOp
+  otherPickScan p1, p2, false
+  log 'hr', (!!x for x in heldRead)
+
+  # This handles the semantics of op (p1) having a pick or a remove.
+  opPick = (p1, p2, w) ->
+    if (c2 = p2?.getComponent())
+      if (slot = c2.d)?
+        p1 = heldRead[slot]
+      else if hasPick c2
+        p1 = null
+      log 'p1->', !!p1
+
+    log !!p1, !!p2
+    return if !p1 and !p2
+
+    if (c1 = p1?.getComponent())
+      log 'get the pick!', c1, c2
+      if c1.r != undefined then w.write 'r', true
+      if c1.p? and !(side == RIGHT and hasDrop c2)
+        # This will either contain a p:X or r:true.
+        c = pickComponent[c1.p] = w.getComponent()
+
+    # TODO with pick list semantics
+    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
+      w.descend key
+      log 'descend', key
+      opPick p1, p2, w
+      log 'ascend', key
+      w.ascend()
 
   w = writeCursor()
-  pick readCursor(oldOp), readCursor(otherOp), w
+  log '---- pick ----'
+  opPick p1, p2, w
 
-  console.log '---- drop phase ----' if debug
-  drop = (o1, o2, w) -> # Op1, Op2, output cursors.
-    assert o1 or o2
+  # This handles the semantics of op (p1) having a drop or an insert
+  opDrop = (p1, p2, w) ->
+    log 'opdrop', !!p1, !!p2
 
-    # No early return here because nested somewhere in o2 might be a drop.
-    # console.log 'drop', dest, op, other if debug
+    log 'c2c', p1?.getComponent(), p2?.getComponent()
 
-    c2 = o2.getComponent() if o2
-    # The other op deletes everything in this subtree.
-    o1 = null if c2?.r != undefined
-    c1 = o1.getComponent() if o1
+    # Logic figured out via a truth table
+    c1 = p1?.getComponent()
+    c2 = p2?.getComponent()
+    if hasDrop(c1) and (side == LEFT || !hasDrop c2)
+      # Copy the drops
+      if c1.d? and (pc = pickComponent[c1.d])
+        w.write 'd', pc.p = nextSlot++
+        pickComponent[c1.d] = null
+      else if c1.i != undefined
+        w.write 'i', clone c1.i
+      if hasDrop c2 then w.write 'r', true
+    else if hasPick(c2) or hasDrop(c2)
+      if (slot = c2.d)?
+        p1 = heldRead[slot]
+        c1 = p1?.getComponent()
+        w.write 'r', true if heldTaint[slot]
+      else if c2.i != undefined || hasPick c2
+        c1 = p1 = null
+      log 'p1 ->', !!p1
 
-    return unless o1 || o2
+    # Edit
+    if (t1 = getType c1)
+      e1 = getEdit c1
+      if (t2 = getType c2)
+        # This might cause problems later. ... eh, later problem.
+        throw Error "Transforming incompatible types" unless t1 == t2
+        e2 = getEdit c2
+        e = t1.transform e1, e2, direction
+      else
+        e = clone e1
 
-    if c1 && (c1.i != undefined || (c1.d? and slotMap[c1.d]?))
-      if !hasDrop(c2) || side == LEFT
-        # console.log 'write'
-        w.write 'd', slotMap[c1.d] if c1.d?
-        w.write 'i', clone(c1.i) if c1.i != undefined
+      if t1 == subtypes.text
+        w.write 'es', e
+      else # also if t1 == subtypes.number then write 'en', e...
+        w.write 'et', c1.et # Just copy the nomenclosure
+        w.write 'e', e
 
-    if c2 && (slot = c2.d)?
-      _w = w
-      w = writeCursor held[slot]
-      log 'dropping', held[slot]
-      delete held[slot] # For debugging
-
-    opKCList = getKCList o1
-    otherKCList = getKCList o2
-    opToFinal = listmap.xfDrop opKCList, otherKCList, side
-    otherToFinal = listmap.xfDrop otherKCList, opKCList, 1-side
-    eachChildOf o1, o2, opToFinal, otherToFinal, (key, o1, o2) ->
-      log 'descending to', key
+    # TODO with drop list semantics
+    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
       w.descend key
-      drop o1, o2, w
+      log 'in', key
+      opDrop p1, p2, w
+      log 'out', key
       w.ascend()
-      log 'ascending    ', key
 
-    if c2 && (slot = c2.d)?
-      log 'writeTree', w.get()
-      _w.writeTree w.get()
+  w.reset()
+  log '----- drop -----'
+  opDrop p1, p2, w
 
-  log held, slotMap
+  # log 'pc:'
+  # log !!pc for pc in pickComponent
+  pc.r = true for pc in pickComponent when pc
 
-  # We'll need a fresh cursor for the next traversal
-  w = writeCursor w.get()
-  drop readCursor(oldOp), readCursor(otherOp), w
-
-  console.log '---- end phase ----' if debug
-  log held, slotMap
   result = w.get()
-  log '--->', result
+  log '->', result
   checkOp result
   return result
 
+
 if require.main == module
   type.debug = true
-  transform [1,{"es":[2,"hi"]}], [[1,{"i":{}}],[2,{"es":["yo"]}]], 'left'
+  transform [["x",{"p":0}],["z",{"d":0}]], ["z",{"i":5}], 'right'
+  log '-----'
+  transform [["x",{"p":0}],["z",{"d":0}]], [['y', p:0], ['z', d:0]], 'right'

@@ -26,6 +26,12 @@ makeCursor = (op = null) ->
   # Except at the root (which could be null), container will always be a list.
   container = op; idx = -1
 
+  configure = (_container, _idx) ->
+    parents.length = indexes.length = 0
+    lcIdx = -1 # shouldn't matter here...
+    container = _container
+    idx = _idx
+
   ascend = ->
     assert.equal parents.length, indexes.length / 2
     if idx is 0
@@ -42,6 +48,9 @@ makeCursor = (op = null) ->
       idx-- if isObject container[idx]
 
   read: ->
+    ascend: ascend
+    _configure: configure
+
     # Only valid to call this after descending into a child.
     getKey: -> container[idx]
 
@@ -71,9 +80,9 @@ makeCursor = (op = null) ->
       return true
 
     nextSibling: ->
+      assert.equal parents.length, indexes.length / 2
       # children are inline or we're at the root
       return false if idx > 0 or parents.length is 0
-      assert.equal parents.length, indexes.length / 2
       i = indexes[indexes.length - 1] + 1
       c = parents[parents.length - 1]
       return false if i >= c.length # Past the end of the listy children
@@ -83,7 +92,31 @@ makeCursor = (op = null) ->
       # idx = 0 # But it should be zero anyway...
       return true
 
-    ascend: ascend
+    clone: ->
+      c = makeCursor(null).read()
+      c._configure container, idx
+      return c
+
+    _print: (prefix) ->
+      {inspect} = require 'util'
+      if (c = @getComponent())
+        console.log "#{prefix}#{inspect c, {depth:2, colors:true}}"
+      return unless @descendFirst()
+      loop
+        k = @getKey()
+        console.log "#{prefix}#{k}:"
+        @_print prefix + '  '
+        break unless @nextSibling()
+      @ascend()
+
+    print: -> @_print ''
+
+    eachChild: (fn) ->
+      return if !@descendFirst()
+      loop
+        fn @getKey()
+        break if !@nextSibling()
+      @ascend()
 
   write: ->
     pendingDescent = []
@@ -91,7 +124,6 @@ makeCursor = (op = null) ->
     flushDescent = ->
       assert.equal parents.length, indexes.length / 2
 
-      # First flush and pending descents.
       if container == null
         op = container = []
 
@@ -142,17 +174,23 @@ makeCursor = (op = null) ->
 
       pendingDescent.length = 0
 
-    write: (key, value) ->
+    reset: -> lcIdx = -1
+
+    # Creates and returns a component, creating one if need be. You should
+    # probably write to it immediately - ops are not valid with empty
+    # components.
+    getComponent: ->
       flushDescent()
 
-      # Actually writing is quite easy now.
       i = idx + 1
       if i < container.length and isObject container[i]
-        container[i][key] = value
+        return container[i]
       else
         component = {}
-        component[key] = value
         container.splice i, 0, component
+        return component
+
+    write: (key, value) -> @getComponent()[key] = value
 
     get: -> op
     descend: (key) -> pendingDescent.push key
@@ -176,8 +214,9 @@ makeCursor = (op = null) ->
           @write k, v for k, v of c
       @ascend() for [0...depth]
 
-exports.writeCursor = (op) -> makeCursor(op).write()
-exports.readCursor = (op) -> makeCursor(op).read()
+
+writeCursor = exports.writeCursor = (op) -> makeCursor(op).write()
+readCursor = exports.readCursor = (op) -> makeCursor(op).read()
 
 exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
   hasChild1 = descended1 = c1?.descendFirst()
@@ -208,21 +247,17 @@ exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
 
 # Only for listy children. Returns null or [keys, components] for numeric key &
 # non-null component pairs.
-exports.getKCList = (cursor) ->
+exports.getKList = (cursor, predicate) ->
   return null if !cursor? or !cursor.descendFirst()
 
   keys = null
-  components = null
 
   loop
     key = cursor.getKey()
-    if typeof key is 'number' and (c = cursor.getComponent())
-      if keys is null
-        keys = []
-        components = []
+    if typeof key is 'number' and (c = cursor.getComponent()) and predicate(c)
+      keys = [] if keys is null
       keys.push key
-      components.push c
     break unless cursor.nextSibling()
   cursor.ascend()
 
-  return if keys is null then null else {keys, components}
+  return keys

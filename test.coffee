@@ -322,7 +322,7 @@ describe 'json1', ->
         left = transform op1, op2, 'left'
         assert.deepEqual left, expectLeft
       catch e
-        transform.debug = true
+        type.debug = true
         printRepro op1, op2, 'left', expectLeft
         transform op1, op2, 'left'
         throw e
@@ -332,7 +332,248 @@ describe 'json1', ->
         right = transform op1, op2, 'right'
         assert.deepEqual right, expectRight
       catch e
-        transform.debug = true
+        type.debug = true
+        printRepro op1, op2, 'right', expectRight
+        transform op1, op2, 'right'
+        throw e
+
+    describe 'op1 pick', ->
+      it 'vs delete', -> xf
+        op1: [['x', p:0], ['y', d:0]]
+        op2: ['x', r:true]
+        expect: null
+      it 'vs delete parent', -> xf
+        op1: [['x', 'a', p:0], ['y', d:0]]
+        op2: ['x', r:true]
+        expect: null
+      it 'vs delete parent 2', -> xf
+        op1: ['x', ['a', p:0], ['b', d:0]]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'vs pick', -> xf
+        op1: [['x', p:0], ['z', d:0]]
+        op2: [['x', p:0], ['y', d:0]]
+        expectLeft: [['y', p:0], ['z', d:0]]
+        expectRight: null
+      it 'vs pick parent', -> xf
+        op1: [['x', 'a', p:0], ['z', d:0]]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: [['y', 'a', p:0], ['z', d:0]]
+
+      it 'vs pick and pick child', -> xf # regression
+        op1: [ # a -> xa, a.c -> xc
+          ['a', p:0, 'c', p:1]
+          ['xa', d:0]
+          ['xc', d:1]
+        ]
+        op2: [['a', p:0], ['b', d:0]] # a -> b
+        expectLeft: [
+          ['b', p:0, 'c', p:1]
+          ['xa', d:0]
+          ['xc', d:1]
+        ]
+        expectRight: [
+          ['b', 'c', p:0]
+          ['xc', d:0]
+        ]
+
+      it 'vs edit', -> xf
+        op1: [['x', p:0], ['z', d:0]]
+        op2: ['x', es:['hi']]
+        expect: [['x', p:0], ['z', d:0]]
+
+      it 'vs delete, drop', -> xf
+        op1: [['x', p:0], ['y', d:0]]
+        op2: [['a', p:0], ['x', r:0, d:0]]
+        expect: null
+
+      it 'vs delete, insert', -> xf
+        op1: [['x', p:0], ['y', d:0]]
+        op2: ['x', r:0, i:5]
+        expect: null
+
+      it.skip 'vs pick, drop to self', -> xf
+        op1: [['x', p:0], ['y', d:0]]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: null # or move onto itself, ie ['y', p:0, d:0] ?
+
+      it 'vs pick, drop', -> xf
+        op1: [['x', p:0], ['z', d:0]] # x->z
+        op2: [['a', p:0], ['x', p:1, d:0], ['y', d:1]] # a->x, x->y
+        expectLeft: [['y', p:0], ['z', d:0]]
+        expectRight: null
+
+      it 'vs pick, insert', -> xf
+        op1: [['x', p:0], ['z', d:0]]
+        op2: [['x', p:0, i:5], ['y', d:0]]
+        expectLeft: [['y', p:0], ['z', d:0]]
+        expectRight: null
+
+      it 'vs pick, edit', ->
+        op1: [['x', p:0], ['z', d:0]]
+        op2: [['x', es:['hi'], p:0], ['y', d:0]]
+        expectLeft: [['y', p:0], ['z', d:0]]
+        expectRight: null
+
+    describe 'op1 delete', ->
+      it 'vs delete', -> xf
+        op1: ['x', r:true]
+        op2: ['x', r:true]
+        expect: null
+      it 'vs delete parent', -> xf
+        op1: ['x', 'a', r:true]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'vs pick', -> xf
+        op1: ['x', r:true]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: ['y', r:true]
+      it 'vs pick parent', -> xf
+        op1: ['x', 'a', r:true]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: ['y', 'a', r:true]
+
+      it 'vs pick and drop', -> xf
+        op1: ['x', r:true]
+        op2: [['a', p:0], ['x', d:0, p:1], ['z', d:1]]
+        expect: ['z', r:true]
+
+      describe 'vs pick child', ->
+        it 'move in', -> xf
+          op1: ['x', r:true]
+          op2: [['a', p:0], ['x', 'y', d:0]]
+          expect: ['x', r:true]
+
+        it 'move across', -> xf
+          op1: ['x', r:true] # delete doc.x
+          op2: ['x', ['y', p:0], ['z', d:0]]
+          expect: ['x', r:true]
+
+        it 'move out', -> xf
+          op1: ['x', r:true]
+          op2: [['x', 'y', p:0], ['y', d:0]] # move doc.x.y -> doc.y
+          expect: [['x', r:true], ['y', r:true]] # delete doc.x and doc.y
+
+        it 'multiple', -> xf
+          op1: ['x', r:true]
+          op2: [['x', 'y', p:0, 'z', p:1], ['y', d:0], ['z', d:1]]
+          expect: [['x', r:true], ['y', r:true], ['z', r:true]]
+
+        it 'mess', -> xf
+          # yeesh
+          op1: [['x', r:true, 'y', 'z', p:0], ['z', d:0]]
+          op2: [['x', 'y', p:0], ['y', d:0]]
+          expect: [['x', r:true], ['y', r:true, 'z', p:0], ['z', d:0]]
+
+      it 'vs edit', -> xf
+        op1: ['x', r:true]
+        op2: ['x', es:['hi']]
+        expect: ['x', r:true]
+
+    describe 'op1 drop', ->
+      it 'vs delete parent', -> xf
+        op1: [['x', p:0], ['y', 'a', d:0]]
+        op2: ['y', r:true]
+        expect: ['x', r:true]
+
+      it 'vs pick parent', -> xf
+        op1: [['x', p:0], ['y', 'a', d:0]]
+        op2: [['y', p:0], ['z', d:0]]
+        expect: [['x', p:0], ['z', 'a', d:0]]
+
+      it 'vs drop', -> xf
+        op1: [['x', p:0], ['z', d:0]]
+        op2: [['y', p:0], ['z', d:0]]
+        expectLeft: [['x', p:0], ['z', r:true, d:0]]
+        expectRight: ['x', r:true]
+
+      it 'vs insert', -> xf
+        op1: [['x', p:0], ['z', d:0]]
+        op2: ['z', i:5]
+        expectLeft: [['x', p:0], ['z', r:true, d:0]]
+        expectRight: ['x', r:true]
+
+      it 'vs pick (a->b->c vs b->x)', -> xf
+        op1: [['a', p:0], ['b', p:1, d:0], ['c', d:1]]
+        op2: [['b', p:0], ['x', d:0]]
+        expectLeft: [['a', p:0], ['b', d:0], ['c', d:1], ['x', p:1]]
+        expectRight: [['a', p:0], ['b', d:0]]
+
+    describe 'op1 insert', ->
+      it 'vs delete parent', -> xf
+        op1: ['y', 'a', i:5]
+        op2: ['y', r:true]
+        expect: null
+
+      it 'vs pick parent', -> xf
+        op1: ['y', 'a', i:5]
+        op2: [['y', p:0], ['z', d:0]]
+        expect: ['z', 'a', i:5]
+
+      it 'vs drop', -> xf
+        op1: ['z', i:5]
+        op2: [['y', p:0], ['z', d:0]]
+        expectLeft: ['z', r:true, i:5]
+        expectRight: null
+
+      it 'vs insert', -> xf
+        op1: ['z', i:5]
+        op2: ['z', i:10]
+        expectLeft: ['z', r:true, i:5]
+        expectRight: null
+
+    describe 'op1 edit', ->
+      it 'vs delete', -> xf
+        op1: ['x', es:['hi']]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'vs delete parent', -> xf
+        op1: ['x', 'y', es:['hi']]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'vs pick', -> xf
+        op1: ['x', es:['hi']]
+        op2: [['x', p:0], ['y', d:0]]
+        expect: ['y', es:['hi']]
+
+      it 'vs edit', -> xf
+        op1: ['x', es:['ab']]
+        op2: ['x', es:['cd']]
+        expectLeft: ['x', es:['ab']]
+        expectRight: ['x', es:[2, 'ab']]
+
+      it 'vs move and edit', -> xf
+        op1: ['x', es:['ab']]
+        op2: [['x', p:0], ['y', d:0, es:['cd']]]
+        expectLeft: ['y', es:['ab']]
+        expectRight: ['y', es:[2, 'ab']]
+
+  describe 'transform-old', ->
+    xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
+      if expect != undefined then expectLeft = expectRight = expect
+
+      type.debug = !!debug
+
+      try
+        #printRepro op1, op2, 'left', expectLeft
+        left = transform op1, op2, 'left'
+        assert.deepEqual left, expectLeft
+      catch e
+        type.debug = true
+        printRepro op1, op2, 'left', expectLeft
+        transform op1, op2, 'left'
+        throw e
+
+      try
+        #printRepro op1, op2, 'right', expectRight
+        right = transform op1, op2, 'right'
+        assert.deepEqual right, expectRight
+      catch e
+        type.debug = true
         printRepro op1, op2, 'right', expectRight
         transform op1, op2, 'right'
         throw e
@@ -346,12 +587,13 @@ describe 'json1', ->
         op2: ['x', {r:true}]
         expect: ['y', ['a', {p:0}], ['b', {d:0}]]
 
-    describe 'object edits', ->
-      it 'can move an edit', -> xf
-        op1: ['x', es:['hi']]
-        op2: [['x', p:0], ['y', d:0]]
-        expect: ['y', es:['hi']]
+    # it 'hard', ->
+    #   op1: ['x', [1, r:true], [2, r:true, es:['hi']]] # Edit at index 4 originally.
+    #   # move the edited string to .y[4] which
+    #   op2: [['x', 4, p:0], ['y', [2, r:true], [4, d:0]]]
+    #   expect:
 
+    describe 'object edits', ->
       it 'can reparent with some extra junk', -> xf
         op1: [['x', p:0], ['y', d:0]]
         op2: [
@@ -361,71 +603,24 @@ describe 'json1', ->
         ]
         expect: [['_x', p:0], ['y', d:0]]
 
-      it 'can move the source of a pickup', -> xf
-        op1: [
-          ['_a', d:1]
-          ['_x', d:0]
-          ['x', p:0, 'a', p:1]
-        ]
-        op2: [['x', p:0], ['y', d:0]]
-        expect: [
-          ['_a', d:1]
-          ['_x', d:0]
-          ['y', p:0, 'a', p:1]
-        ]
-
-      it 'obeys symmetry', -> xf
-        op1: ['x', i:'one']
-        op2: ['x', i:'two']
-        expectLeft: ['x', i:'one']
-        expectRight: null
 
     describe 'deletes', ->
-      it 'delete vs delete', -> xf
-        op1: ['a', r:true]
-        op2: ['a', r:true]
-        expect: null # It was already deleted.
-
-      it 'move vs delete', -> xf
-        op1: ['y', ['a', p:0], ['b', d:0]]
-        op2: ['y', r:true]
-        expect: null
-
-      it 'deletes the source of a move', -> xf
-        op1: [['x', p:0], ['y', d:0]]
-        op2: ['x', r:true]
-        expect: null
 
       it 'delete parent of a move', -> xf
-        # obj.a = obj.x.a; delete obj.x;
+        # x.a -> a, delete x;
         op1: [['a', d:0], ['x', r:true, 'a', p:0]]
         op2: ['x', ['a', p:0], ['b', d:0]]
         expect: [['a', d:0], ['x', r:true, 'b', p:0]]
 
-      it.skip 'deletes follow an escapee', ->
+      it 'awful delete nonsense', ->
         xf
-          # Its unfortunate we need this behaviour both from an implementation and
-          # a usage standpoint. Sadly if we didn't there'd be consequences at
-          # runtime. If you want to avoid this problem, you need to copy out the
-          # data instead (and delete the original).
-          op1: ['x', r:{a:5, b:6}]
-          op2: [['a', d:0], ['x', 'a', p:0]]
-          expect: [['a', r:5], ['x', r:{b:6}]]
-
-        xf # Putting the deleted data in r: is optional. Just default to :true.
-          op1: ['x', r:true]
-          op2: [['a', d:0], ['x', 'a', p:0]]
-          expect: [['a', r:true], ['x', r:true]]
-
-      it.skip 'awful delete nonsense', ->
-        xf
-          op1: [['x', r:{a:5, b:6}], ['y', i:'hi']]
-          op2: [['x', 'a', p:0], ['y', d:0]]
-          expect: [['x', r:{b:5}], ['y', r:5, i:'hi']]
+          op1: [['x', r:true], ['y', i:'hi']] # delete doc.x, insert doc.y
+          op2: [['x', 'a', p:0], ['y', d:0]] # move doc.x.a -> doc.y
+          expect: [['x', r:true], ['y', r:true, i:'hi']] # del doc.x and doc.y, insert doc.y
 
         xf
-          op1: [['x', 'a', p:0], ['y', d:0]]
-          op2: [['x', r:true], ['y', i:'hi']]
+          op1: [['x', 'a', p:0], ['y', d:0]] # x.a -> y
+          op2: [['x', r:true], ['y', i:'hi']] # delete x, ins y
           expect: null
 
         xf
@@ -433,6 +628,7 @@ describe 'json1', ->
           op2: [[5, d:0], [10, 1, p:0]]
           expect: [[5, r:2], [11, r:[1,3]]]
         # And how do those indexes interact with pick / drop operations??
+
 
     describe 'swap', ->
       swap = [
@@ -450,7 +646,7 @@ describe 'json1', ->
         op2: swap
         expect: ['b', es:['b edit'], 'a', es:['a edit']]
 
-    describe 'lists', ->
+    describe.skip 'lists', ->
       it 'can rewrite simple list indexes', ->
         xf
           op2: [0, i:'oh hi']
@@ -571,7 +767,7 @@ describe 'json1', ->
         op2: [{e:{position:0, text:'omg'}, et:'simple'}]
         expect: [{e:{position:5, text:'wai'}, et:'simple'}]
 
-      it.skip 'applies edits in the right order', -> xf
+      it 'applies edits in the right order', -> xf
         # Edits happen *after* the drop phase.
         op1: [1, es:[2, 'hi']]
         op2: [[1, i:{}], [2, es:['yo']]]
