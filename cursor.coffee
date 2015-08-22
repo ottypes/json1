@@ -1,8 +1,11 @@
 assert = require 'assert'
 
+EMPTY_LIST = []
+
 isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
 
 isGreaterKey = (a, b) ->
+  # All the numbers, then all the letters. Just as the gods of ascii intended.
   if typeof(a) is typeof(b)
     a > b
   else
@@ -28,7 +31,7 @@ makeCursor = (op = null) ->
 
   configure = (_container, _idx) ->
     parents.length = indexes.length = 0
-    lcIdx = -1 # shouldn't matter here...
+    # lcIdx = -1 # shouldn't matter here...
     container = _container
     idx = _idx
 
@@ -96,6 +99,17 @@ makeCursor = (op = null) ->
       c = makeCursor(null).read()
       c._configure container, idx
       return c
+
+    getKList: (predicate) ->
+      return EMPTY_LIST unless @descendFirst()
+      keys = null
+      loop
+        key = @getKey()
+        if typeof key is 'number' and (c = @getComponent()) and predicate(c)
+          keys = [] if keys is null
+          keys.push key
+        break unless @nextSibling()
+      @ascend()
 
     _print: (prefix) ->
       {inspect} = require 'util'
@@ -200,7 +214,7 @@ makeCursor = (op = null) ->
       else
         ascend()
 
-    writeTree: (data) ->
+    mergeTree: (data) ->
       return if data is null
       assert Array.isArray data
       depth = 0
@@ -217,6 +231,18 @@ makeCursor = (op = null) ->
 
 writeCursor = exports.writeCursor = (op) -> makeCursor(op).write()
 readCursor = exports.readCursor = (op) -> makeCursor(op).read()
+
+# This is kind of an externally driven iterator for cursors.
+advancer = exports.advancer = (c) ->
+  party = didDescend = c?.descendFirst()
+  fn = (k) ->
+    while party and isGreaterKey k, c.getKey()
+      party = c.nextSibling()
+
+    return if party and c.getKey() == k then c else null
+  fn.end = ->
+    if didDescend then c.ascend()
+  return fn
 
 exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
   hasChild1 = descended1 = c1?.descendFirst()
@@ -245,10 +271,10 @@ exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
   c1.ascend() if descended1
   c2.ascend() if descended2
 
-# Only for listy children. Returns null or [keys, components] for numeric key &
-# non-null component pairs.
-exports.getKList = (cursor, predicate) ->
-  return null if !cursor? or !cursor.descendFirst()
+# Only for listy children. Returns a list of contained keys with a component
+# which matches the specified predicate.
+getKList = exports.getKList = (cursor, predicate) ->
+  return EMPTY_LIST if !cursor? or !cursor.descendFirst()
 
   keys = null
 
@@ -260,4 +286,4 @@ exports.getKList = (cursor, predicate) ->
     break unless cursor.nextSibling()
   cursor.ascend()
 
-  return keys
+  return keys or EMPTY_LIST

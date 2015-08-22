@@ -332,7 +332,7 @@ listmap = require './listmap'
 
 LEFT = 0
 RIGHT = 1
-
+{getKList} = cursor
 
 transform = type.transform = (oldOp, otherOp, direction) ->
   assert direction in ['left', 'right']
@@ -349,102 +349,162 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   checkOp otherOp
 
   # Indexed by op2's slots.
-  heldRead = [] # Read cursor at the place in op1
-  heldTaint = []
+  heldOp2Drop = [] # Read cursor at the pick up in op2
+  cancelledOp2 = [] # op2 moves which have been cancelled.
 
   nextSlot = 0
   # slotMap = []
 
-  pickComponent = [] # indexed by p1's original slot #
+  p1 = readCursor oldOp
+  p2 = readCursor otherOp
+  w = writeCursor()
 
-  otherPickScan = (p1, p2, taint) ->
+  # ---------------------------------------------------------------------
+  scanOp2 = (p1, p2, removed) ->
     # Scanning the other op looking for the pickup locations.
     c1 = p1?.getComponent()
     c2 = p2.getComponent()
 
-    if (slot = c2?.p)?
-      log slot, c1, c2
-      if p1
-        heldRead[slot] = p1.clone()
-      else
-        heldRead[slot] = null
-      heldTaint[slot] = taint
+    if c1
+      if c1.r != undefined then removed = true
+      else if c1.p? then removed = false
 
-    taint = true if c1?.r
-    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
+    if c2
+      if (slot = c2.p)?
+        log slot, c1, c2
+        cancelledOp2[slot] = true if removed
+
+      if (slot = c2.d)?
+        heldOp2Drop[slot] = p2.clone()
+
+    ap1 = cursor.advancer p1
+    p2.eachChild (key) ->
       log 'in', key
-      otherPickScan p1, p2, taint if p2
+      scanOp2 ap1(key), p2, removed
       log 'out', key
+    ap1.end()
 
-  p1 = readCursor oldOp
-  p2 = readCursor otherOp
-  otherPickScan p1, p2, false
-  log 'hr', (!!x for x in heldRead)
+  scanOp2 p1, p2, false
+  log 'hd', (!!x for x in heldOp2Drop)
+
+  # ---------------------------------------------------------------------
+  cancelOp2Drops = (p2, p1, w, removed) ->
+    removed = true if (c1 = p1?.getComponent())?.r != undefined
+    removed = false if c1?.p?
+
+    c2 = p2.getComponent()
+    if !removed and (slot = c2?.d)? and cancelledOp2[slot]
+      w.write 'r', true
+      # w.write 'r', 'cancelop2'
+      removed = true
+
+    ap1 = cursor.advancer p1
+    p2.eachChild (key) ->
+      w.descend key
+      cancelOp2Drops p2, ap1(key), w, removed
+      w.ascend key
+    ap1.end()
+
+  cancelOp2Drops(p2, p1, w, false) if cancelledOp2.length
+  w.reset()
+
+  # ---------------------------------------------------------------------
+
+  heldWrites = [] # indexed by op2 slot numbers
+
+  pickComponents = [] # indexed by op1 original slot numbers
 
   # This handles the semantics of op (p1) having a pick or a remove.
-  opPick = (p1, p2, w) ->
-    if (c2 = p2?.getComponent())
-      if (slot = c2.d)?
-        p1 = heldRead[slot]
-      else if hasPick c2
-        p1 = null
-      log 'p1->', !!p1
+  opPick = (p1, p2Pick, p2Drop, w, removed) ->
+    # p1 and w are always defined.
+    iAmMoved = false
+    if (c2 = p2Pick?.getComponent())
+      if (slot = c2.p)?
+        # aah we need to teleport THINGS!
+        p2Drop = heldOp2Drop[slot]
+        w = heldWrites[slot] = writeCursor()
+        iAmMoved = true
+        removed = false
+      else if c2.r != undefined
+        removed = true
 
-    log !!p1, !!p2
-    return if !p1 and !p2
+    if (c1 = p1.getComponent())
+      if (slot = c1.p)?
+        log 'rrr', removed, side, iAmMoved
+        pickComponents[slot] = if removed or (side == RIGHT and iAmMoved)
+          null
+        else
+          w.getComponent()
+      else if c1.r != undefined and !removed
+        w.write 'r', true
+        # w.write 'r', 'xx'
 
-    if (c1 = p1?.getComponent())
-      log 'get the pick!', c1, c2
-      if c1.r != undefined then w.write 'r', true
-      if c1.p? and !(side == RIGHT and hasDrop c2)
-        # This will either contain a p:X or r:true.
-        c = pickComponent[c1.p] = w.getComponent()
-
-    # TODO with pick list semantics
-    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
-      w.descend key
-      log 'descend', key
-      opPick p1, p2, w
-      log 'ascend', key
+    map = listmap.forward p2Pick?.getKList(hasPick), p2Drop?.getKList(hasDrop), side, RIGHT
+    ap2Pick = cursor.advancer p2Pick
+    ap2Drop = cursor.advancer p2Drop
+    p1.eachChild (key) ->
+      p2Pick_ = ap2Pick key
+      mappedKey = map key
+      p2Drop_ = ap2Drop mappedKey
+      w.descend mappedKey
+      opPick p1, p2Pick_, p2Drop_, w, removed
       w.ascend()
+    ap2Pick.end(); ap2Drop.end()
 
-  w = writeCursor()
   log '---- pick ----'
-  opPick p1, p2, w
+  opPick p1, p2, p2.clone(), w, false
+  w.reset()
 
+  log pickComponents
+
+  # ---------------------------------------------------------------------
+  log 'cancelled', cancelledOp2
   # This handles the semantics of op (p1) having a drop or an insert
-  opDrop = (p1, p2, w) ->
-    log 'opdrop', !!p1, !!p2
-
-    log 'c2c', p1?.getComponent(), p2?.getComponent()
-
+  opDrop = (p1Pick, p1Drop, p2Pick, p2Drop, w, removed) ->
     # Logic figured out via a truth table
-    c1 = p1?.getComponent()
-    c2 = p2?.getComponent()
-    if hasDrop(c1) and (side == LEFT || !hasDrop c2)
-      # Copy the drops
-      if c1.d? and (pc = pickComponent[c1.d])
-        w.write 'd', pc.p = nextSlot++
-        pickComponent[c1.d] = null
-      else if c1.i != undefined
-        w.write 'i', clone c1.i
-      if hasDrop c2 then w.write 'r', true
-    else if hasPick(c2) or hasDrop(c2)
-      if (slot = c2.d)?
-        p1 = heldRead[slot]
-        c1 = p1?.getComponent()
-        w.write 'r', true if heldTaint[slot]
-      else if c2.i != undefined || hasPick c2
-        c1 = p1 = null
-      log 'p1 ->', !!p1
+    c1d = p1Drop.getComponent()
+    c2d = p2Drop?.getComponent()
+    if c1d and (c1d.i != undefined or (c1d.d? and (pc = pickComponents[c1d.d])))
+      # log 'rr', !removed, side == LEFT, !hasDrop(c2d), c2d, cancelledOp2[c2d.d]
+
+      if !removed and (side == LEFT || !hasDrop(c2d) || (c2d.d? and cancelledOp2[c2d.d]))
+        # Copy the drops
+        if c1d.d?
+          w.write 'd', pc.p = nextSlot++
+          # pickComponent[c1.d] = null
+        else if c1d.i != undefined
+          w.write 'i', clone c1d.i
+
+        assert w.getComponent().r if hasDrop(c2d) and (c1d.d? and cancelledOp2[c1d.d])
+
+        if hasDrop c2d then w.write 'r', true # I fart in your general direction
+        # if hasDrop c2d then w.write 'r', 'overwrite'
+
+      else
+        log "Halp! We're being overwritten!"
+        pc.r = true if pc
+
+
+
+    if (c2p = p2Pick?.getComponent())
+      if (slot = c2p.p)?
+        # Teleport.
+        p2Drop = heldOp2Drop[slot]
+        c2d = p2Drop?.getComponent()
+        w = heldWrites[slot] = writeCursor() if !(w = heldWrites[slot])
+        w.reset()
+        removed = false
+      else if c2p.r != undefined
+        removed = true
+
 
     # Edit
-    if (t1 = getType c1)
-      e1 = getEdit c1
-      if (t2 = getType c2)
+    if !removed and (t1 = getType c1d)
+      e1 = getEdit c1d
+      if (t2 = getType c2d)
         # This might cause problems later. ... eh, later problem.
         throw Error "Transforming incompatible types" unless t1 == t2
-        e2 = getEdit c2
+        e2 = getEdit c2d
         e = t1.transform e1, e2, direction
       else
         e = clone e1
@@ -452,24 +512,59 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       if t1 == subtypes.text
         w.write 'es', e
       else # also if t1 == subtypes.number then write 'en', e...
-        w.write 'et', c1.et # Just copy the nomenclosure
+        w.write 'et', c1d.et # Just copy the nomenclosure
         w.write 'e', e
 
-    # TODO with drop list semantics
-    cursor.eachChildOf p1, p2, null, null, (key, p1, p2) ->
+
+    # Somehow we also have to add in the cancelled children
+    p1pk = p1Pick?.getKList(hasPick)
+    p1dk = p1Drop.getKList(hasDrop)
+    p2pk = p2Pick?.getKList(hasPick)
+    p2dk = p2Drop?.getKList(hasDrop)
+
+    ap1p = cursor.advancer p1Pick
+    ap2p = cursor.advancer p2Pick
+    ap2d = cursor.advancer p2Drop
+
+    p1Drop.eachChild (key) ->
+      # hookaaay....
+      if typeof key is 'string'
+        _p1Pick = ap1p key
+        _p2Pick = ap2p key
+        _p2Drop = ap2d key
+        w.descend key
+
+        opDrop _p1Pick, p1Drop, _p2Pick, _p2Drop, w, removed
+        w.ascend key
+      else
+        throw Error 'kill me!'
+
+
+    ap1p.end(); ap2p.end(); ap2d.end()
+
+  log '----- drop -----'
+  opDrop p1, p1.clone(), p2, p2.clone(), w, false
+  w.reset()
+
+  # ---------------------------------------------------------------------
+
+  # Now we need to fill in the moved writes.
+
+  emplaceWrites = (p2Drop, w) ->
+    if (c2 = p2Drop.getComponent()) and (slot = c2.d)?
+      _w = heldWrites[slot]
+      w.mergeTree _w.get() if _w
+
+    p2Drop.eachChild (key) ->
       w.descend key
-      log 'in', key
-      opDrop p1, p2, w
-      log 'out', key
+      emplaceWrites p2Drop, w
       w.ascend()
 
-  w.reset()
-  log '----- drop -----'
-  opDrop p1, p2, w
+  emplaceWrites p2, w
 
   # log 'pc:'
-  # log !!pc for pc in pickComponent
-  pc.r = true for pc in pickComponent when pc
+  # log !!pc for pc in pickComponents
+  # pc.r = true for pc in pickComponents when pc
 
   result = w.get()
   log '->', result
@@ -479,6 +574,4 @@ transform = type.transform = (oldOp, otherOp, direction) ->
 
 if require.main == module
   type.debug = true
-  transform [["x",{"p":0}],["z",{"d":0}]], ["z",{"i":5}], 'right'
-  log '-----'
-  transform [["x",{"p":0}],["z",{"d":0}]], [['y', p:0], ['z', d:0]], 'right'
+  transform ["x",{"es":["hi"]}], ["x",{"r":true}], 'left'
