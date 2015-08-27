@@ -59,8 +59,7 @@ forward = exports.forward = (pickList = [], dropList = [], pickSide, defaultDrop
 #
 # So, if you have an op which does 10:pick, 20:drop it'll map the index 20 ->
 # 21 because thats where the drop would have been if the pick didn't happen.
-reverse = exports.reverse = (pickList, dropList) ->
-  pickKeyPos = dropKeyPos = 0
+reverse = exports.reverse = (pickList = [], dropList = []) ->
   pickOffset = dropOffset = 0
 
   prevDestIdx = -1 # for debugging
@@ -78,20 +77,18 @@ reverse = exports.reverse = (pickList, dropList) ->
     assert destIdx >= prevDestIdx
     prevDestIdx = destIdx
 
-    while dropKeyPos < dropList.length and dropList[dropKeyPos] < destIdx
+    while dropOffset < dropList.length and dropList[dropOffset] < destIdx
       dropOffset++ #if hasDrop components[dropKeyPos]
-      dropKeyPos++
 
-    cursor.dropHere = dropKeyPos < dropList.length and
-      dropList[dropKeyPos] == destIdx #and hasDrop components[dropKeyPos]
+    cursor.dropHere = dropOffset < dropList.length and
+      dropList[dropOffset] == destIdx #and hasDrop components[dropKeyPos]
 
     d2 = destIdx - dropOffset
     assert d2 >= 0
 
-    while pickKeyPos < pickList.length and (k = pickList[pickKeyPos]) - pickOffset <= d2
+    while pickOffset < pickList.length and (k = pickList[pickOffset]) - pickOffset <= d2
       break if k - pickOffset == d2 and cursor.dropHere
       pickOffset++ #if hasPick components[pickKeyPos]
-      pickKeyPos++
 
     #return pickOffset - dropOffset
     #return {raw:d2 + pickOffset, o:dropOffset}
