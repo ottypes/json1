@@ -796,8 +796,15 @@ describe 'json1', ->
         op2: [['x', 'a', p:0], ['y', 2, d:0]]
         expect: [['x', r:true], ['y', [2, r:true], [3, i:5]]]
 
-      it 'vs cancelled op1 drop'
-      it 'vs removed op1 pick for own drop'
+      it 'vs cancelled op1 drop', -> xf
+        op1: [['x', p:0], ['y', [3, d:0], [4, i:5]]]
+        op2: ['x', r:true]
+        expect: ['y', 3, i:5]
+
+      it 'vs cancelled op1 pick', -> xf
+        op1: [[3, p:0], [5, r:true, i:4], [10, d:0]]
+        op2: [3, r:true]
+        expect: [4, r:true, i:4]
 
     describe 'edit', ->
       it 'transforms edits by one another', -> xf

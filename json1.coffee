@@ -327,9 +327,6 @@ type.apply = (snapshot, op) ->
   return snapshot
 
 
-
-listmap = require './listmap'
-
 LEFT = 0
 RIGHT = 1
 {getKList} = cursor
@@ -572,7 +569,9 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         p1PickOff++
         log 'p1Pick++', p1PickOff, k, c
         # Basically, if it wasn't cancelled.
-        outPickOff++ if c.r != undefined or pickComponents[c.p]
+        # I'm not sure if its possible for a p1 pick to be cancelled here. I can't figure out how to write a test case which requires this conditional.
+        outPickOff++ # if c.r != undefined or pickComponents[c.p]
+
     ap1p._name = '1p'
 
     ap2p = cursor.advancer p2Pick, null, (k, c) ->
@@ -585,7 +584,9 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       return if hasDrop(c) then -(k - p2DropOff) else k - p2DropOff
     , (k, c) ->
       if hasDrop(c)
-        p2DropOff++ if c.i != undefined or !cancelledOp2[c.d]
+        p2DropOff++
+        # We've added a remove to cancel the op.
+        outPickOff++ if c.d? and cancelledOp2[c.d]
         log 'p2Drop++', p2DropOff, k, c
 
     ap2d._name = '2d'
