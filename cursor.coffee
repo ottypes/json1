@@ -1,4 +1,5 @@
 assert = require 'assert'
+log = require './log'
 
 EMPTY_LIST = []
 
@@ -233,57 +234,22 @@ writeCursor = exports.writeCursor = (op) -> makeCursor(op).write()
 readCursor = exports.readCursor = (op) -> makeCursor(op).read()
 
 # This is kind of an externally driven iterator for cursors.
-advancer = exports.advancer = (c) ->
-  party = didDescend = c?.descendFirst()
+advancer = exports.advancer = (c, listMap, listAdvance, listCompare) ->
+  valid = didDescend = c?.descendFirst()
   fn = (k) ->
-    while party and isGreaterKey k, c.getKey()
-      party = c.nextSibling()
+    while valid
+      skip = false
+      k2 = c.getKey()
+      if listMap and typeof k2 is 'number'
+        k2 = listMap(k2, c.getComponent())
+        if k2 < 0
+          k2 = -k2; skip = true
+      log 'advancer', fn._name, k, k2
+      break if isGreaterKey(k2, k) or (!skip and k == k2) # break if k2 >= k
+      listAdvance(k2, c.getComponent()) if listAdvance and typeof k2 is 'number'
+      valid = c.nextSibling()
 
-    return if party and c.getKey() == k then c else null
+    return if valid and k == k2 then c else null
   fn.end = ->
     if didDescend then c.ascend()
   return fn
-
-exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
-  hasChild1 = descended1 = c1?.descendFirst()
-  hasChild2 = descended2 = c2?.descendFirst()
-
-  while hasChild1 || hasChild2
-    k1 = if hasChild1 then c1.getKey() else null
-    k2 = if hasChild2 then c2.getKey() else null
-
-    k1 = listMap1 k1 if listMap1 && typeof k1 is 'number'
-    k2 = listMap2 k2 if listMap2 && typeof k2 is 'number'
-
-    # console.log 'k1k2', k1, k2
-
-    if k1 != null and k2 != null
-      if isGreaterKey k2, k1
-        k2 = null
-      else if k1 != k2
-        k1 = null
-
-    # fn key, c1 or null, c2 or null
-    fn (if k1 == null then k2 else k1), (c1 if k1 != null), (c2 if k2 != null)
-    hasChild1 = c1.nextSibling() if k1 != null and hasChild1
-    hasChild2 = c2.nextSibling() if k2 != null and hasChild2
-
-  c1.ascend() if descended1
-  c2.ascend() if descended2
-
-# Only for listy children. Returns a list of contained keys with a component
-# which matches the specified predicate.
-getKList = exports.getKList = (cursor, predicate) ->
-  return EMPTY_LIST if !cursor? or !cursor.descendFirst()
-
-  keys = null
-
-  loop
-    key = cursor.getKey()
-    if typeof key is 'number' and (c = cursor.getComponent()) and predicate(c)
-      keys = [] if keys is null
-      keys.push key
-    break unless cursor.nextSibling()
-  cursor.ascend()
-
-  return keys or EMPTY_LIST

@@ -311,7 +311,7 @@ describe 'json1', ->
 
 # ****** Transform ******
 
-  describe.only 'transform', ->
+  describe 'transform', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
       if expect != undefined then expectLeft = expectRight = expect
 
@@ -456,10 +456,15 @@ describe 'json1', ->
           op2: [['x', 'y', p:0], ['y', d:0]] # move doc.x.y -> doc.y
           expect: [['x', r:true], ['y', r:true]] # delete doc.x and doc.y
 
-        it 'multiple', -> xf
+        it 'multiple out', -> xf
           op1: ['x', r:true]
           op2: [['x', 'y', p:0, 'z', p:1], ['y', d:0], ['z', d:1]]
           expect: [['x', r:true], ['y', r:true], ['z', r:true]]
+
+        it 'chain out', -> xf # Not sure if this is a useful test
+          op1: ['x', r:true]
+          op2: [['x', 'y', p:0], ['y', p:1], ['z', d:0, 'a', d:1]]
+          expect: [['x', r:true], ['z', r:true]]
 
         it 'mess', -> xf
           # yeesh
@@ -478,6 +483,11 @@ describe 'json1', ->
         op2: ['y', r:true]
         expect: ['x', r:true]
 
+      it 'vs a cancelled parent', -> xf
+        op1: [['x', 'y', p:0], ['y', p:1], ['z', d:0, 'a', d:1]]
+        op2: ['x', r:true]
+        expect: ['y', r:true]
+
       it 'vs pick parent', -> xf
         op1: [['x', p:0], ['y', 'a', d:0]]
         op2: [['y', p:0], ['z', d:0]]
@@ -488,6 +498,12 @@ describe 'json1', ->
         op2: [['y', p:0], ['z', d:0]]
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
+
+      it 'vs drop (chained)', -> xf
+        op1: [['a', p:1], ['x', p:0], ['z', d:0, 'a', d:1]]
+        op2: [['y', p:0], ['z', d:0]]
+        expectLeft: [['a', p:1], ['x', p:0], ['z', r:true, d:0, 'a', d:1]]
+        expectRight: [['a', r:true], ['x', r:true]]
 
       it 'vs insert', -> xf
         op1: [['x', p:0], ['z', d:0]]
@@ -551,6 +567,29 @@ describe 'json1', ->
         op2: [['x', p:0], ['y', d:0, es:['cd']]]
         expectLeft: ['y', es:['ab']]
         expectRight: ['y', es:[2, 'ab']]
+
+    describe 'op2 cancel move', ->
+      it 'and insert', -> xf
+        op2: [['x', 'a', p:0], ['y', d:0, 'b', i:5]]
+        op1: ['x', r:true]
+        expect: [['x', r:true], ['y', r:true]]
+
+      it 'and another move', -> xf
+        op2: [['q', p:1], ['x', 'a', p:0], ['y', d:0, 'b', d:1]]
+        op1: ['x', r:true]
+        expect: [['x', r:true], ['y', r:true]]
+
+    describe 'list', ->
+      describe 'drop', ->
+        it 'transforms by p1 drops', -> xf
+          op1: [[5, i:5], [10, i:10]]
+          op2: [9, i:9]
+          expectLeft: [[5, i:5], [10, i:10]]
+          expectRight: [[5, i:5], [11, i:10]]
+
+        it 'transforms by p1 picks'
+        it 'transforms by p2 picks'
+        it 'transforms by p2 drops'
 
   describe 'transform-old', ->
     xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
@@ -625,9 +664,9 @@ describe 'json1', ->
           expect: null
 
         xf
-          op1: [10, r:[1,2,3]]
+          op1: [10, r:true]
           op2: [[5, d:0], [10, 1, p:0]]
-          expect: [[5, r:2], [11, r:[1,3]]]
+          expect: [[5, r:true], [11, r:true]]
         # And how do those indexes interact with pick / drop operations??
 
 
@@ -647,21 +686,21 @@ describe 'json1', ->
         op2: swap
         expect: ['b', es:['b edit'], 'a', es:['a edit']]
 
-    describe.skip 'lists', ->
+    describe 'lists', ->
       it 'can rewrite simple list indexes', ->
         xf
-          op2: [0, i:'oh hi']
           op1: [10, es:['edit']]
+          op2: [0, i:'oh hi']
           expect: [11, es:['edit']]
 
         xf
+          op1: [10, r:true]
           op2: [0, i:'oh hi']
-          op1: [10, r:{}]
-          expect: [11, r:{}]
+          expect: [11, r:true]
 
         xf
-          op2: [0, i:'oh hi']
           op1: [10, i:{}]
+          op2: [0, i:'oh hi']
           expect: [11, i:{}]
 
       it 'can change the root from an object to a list', -> xf
@@ -675,75 +714,75 @@ describe 'json1', ->
         expect: [[10, i:1], [11, i:2], [12, i:3]]
 
       it 'fixes drop indexes correctly 1', -> xf
-        op2: [1, r:true]
         op1: [[0, r:true], [1, i:'hi']]
+        op2: [1, r:true]
         expect: [0, r:true, i:'hi']
 
       it 'list drop vs delete uses the correct result index', ->
         xf
-          op2: [2, r:true]
           op1: [2, i:'hi']
+          op2: [2, r:true]
           expect: [2, i:'hi']
 
         xf
-          op2: [2, r:true]
           op1: [3, i:'hi']
+          op2: [2, r:true]
           expect: [2, i:'hi']
 
       it 'list drop vs drop uses the correct result index', -> xf
-        op2: [2, i:'other']
         op1: [2, i:'hi']
+        op2: [2, i:'other']
         expectLeft: [2, i:'hi']
         expectRight: [3, i:'hi']
 
       it 'list drop vs delete and drop', ->
         xf
-          op2: [2, r:true, i:'other']
           op1: [2, i:'hi']
+          op2: [2, r:true, i:'other']
           expectLeft: [2, i:'hi']
           expectRight: [3, i:'hi']
 
         xf
-          op2: [[2, r:true], [3, i:'other']]
           op1: [3, i:'hi']
+          op2: [[2, r:true], [3, i:'other']]
           expect: [2, i:'hi']
 
         xf
-          op2: [[2, r:true], [3, i:'other']]
           op1: [4, i:'hi']
+          op2: [[2, r:true], [3, i:'other']]
           expectLeft: [3, i:'hi']
           expectRight: [4, i:'hi']
 
       it 'list delete vs drop', ->
         xf
-          op2: [2, i:'hi']
           op1: [1, r:true]
+          op2: [2, i:'hi']
           expect: [1, r:true]
 
         xf
-          op2: [2, i:'hi']
           op1: [2, r:true]
+          op2: [2, i:'hi']
           expect: [3, r:true]
 
         xf
-          op2: [2, i:'hi']
           op1: [3, r:true]
+          op2: [2, i:'hi']
           expect: [4, r:true]
 
       it 'list delete vs delete', ->
         xf
-          op2: [1, r:true]
           op1: [1, r:true]
+          op2: [1, r:true]
           expect: null # It was already deleted.
 
       it 'fixes drop indexes correctly 2', -> xf
-        op2: [2, r:true] # Shouldn't affect the op.
         op1: [[0, r:true], [1, i:'hi']]
+        op2: [2, r:true] # Shouldn't affect the op.
         expect: [[0, r:true], [1, i:'hi']]
 
       it 'insert vs delete parent', -> xf
-        op2: [2, r:true]
         op1: [2, 'x', i:'hi']
+        op2: [2, r:true]
         expect: null
 
       it 'transforms against inserts in my own list', ->
@@ -751,6 +790,14 @@ describe 'json1', ->
           op1: [[0, i:'a'], [2, i:'b']]
           op2: [1, r:true]
           expect: [[0, i:'a'], [2, i:'b']]
+
+      it 'vs cancelled op2 drop', -> xf
+        op1: [['x', r:true], ['y', 3, i:5]]
+        op2: [['x', 'a', p:0], ['y', 2, d:0]]
+        expect: [['x', r:true], ['y', [2, r:true], [3, i:5]]]
+
+      it 'vs cancelled op1 drop'
+      it 'vs removed op1 pick for own drop'
 
     describe 'edit', ->
       it 'transforms edits by one another', -> xf
