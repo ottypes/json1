@@ -22,6 +22,34 @@ printRepro = (op1, op2, direction, expect) ->
   console.error 'FAIL! Repro with:'
   console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
 
+apply = ({doc:snapshot, op, expect}) ->
+  snapshot = type.apply snapshot, op
+  assert.deepEqual snapshot, expect
+
+xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
+  if expect != undefined then expectLeft = expectRight = expect
+
+  type.debug = !!debug
+
+  try
+    #printRepro op1, op2, 'left', expectLeft
+    left = transform op1, op2, 'left'
+    assert.deepEqual left, expectLeft
+  catch e
+    type.debug = true
+    printRepro op1, op2, 'left', expectLeft
+    transform op1, op2, 'left'
+    throw e
+
+  try
+    #printRepro op1, op2, 'right', expectRight
+    right = transform op1, op2, 'right'
+    assert.deepEqual right, expectRight
+  catch e
+    type.debug = true
+    printRepro op1, op2, 'right', expectRight
+    transform op1, op2, 'right'
+    throw e
 
 
 describe 'json1', ->
@@ -45,6 +73,7 @@ describe 'json1', ->
       pass [['a',{p:0}],['b',{d:0}],['x',{p:1}],['y',{d:1}]]
 
     it 'disallows invalid syntax', ->
+      fail undefined
       fail {}
       fail "hi"
       fail true
@@ -170,10 +199,6 @@ describe 'json1', ->
 # ****** Apply ******
 
   describe 'apply', ->
-    apply = ({doc:snapshot, op, expect}) ->
-      snapshot = type.apply snapshot, op
-      assert.deepEqual snapshot, expect
-
     it 'Can set properties', ->
       apply
         doc: []
@@ -243,6 +268,50 @@ describe 'json1', ->
       doc: {x: "yooo"}
       op: [['x', p:0], ['y', d:0, es:['sup']]]
       expect: {y: "supyooo"}
+
+  describe.only 'regressions', ->
+    it 'asdf', -> apply
+      doc: { the: '', Twas: 'the' }
+      op: [ 'the', { es: [] } ]
+      expect: { the: '', Twas: 'the' }
+
+    it 'does not duplicate list items from edits', -> apply
+      doc: ['eyes']
+      op: [ 0, { es: [] } ]
+      expect: ['eyes']
+
+    it 'will edit the root document', -> apply
+      doc: ''
+      op: [es:[]]
+      expect: ''
+
+    it 'inserts before edits', ->
+      xf
+        op1: [0, 'x', i:5]
+        op2: [0, i:35]
+        expect: [1, 'x', i:5]
+
+      xf
+        op1: [0, es:[]]
+        op2: [0, i:35]
+        expect: [1, es:[]]
+
+    it 'duplicates become noops in a list',
+      -> xf
+        op1: [0,{"p":0,"d":0}]
+        op2: [0,{"p":0,"d":0}]
+        expect: null
+
+      -> xf
+        op1: [0, r:true, i:'a']
+        op2: [0, i:'b']
+        expectLeft: [[0, i:'a'], [1, r:true]]
+        expectRight: [1, r:true, i:'a']
+
+      -> xf
+        op1: [0, r:true, i:5]
+        op2: [0, r:true]
+        expect: [0, i:5]
 
 
 # ******* Compose *******
@@ -364,31 +433,6 @@ describe 'json1', ->
 # ****** Transform ******
 
   describe 'transform', ->
-    xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
-      if expect != undefined then expectLeft = expectRight = expect
-
-      type.debug = !!debug
-
-      try
-        #printRepro op1, op2, 'left', expectLeft
-        left = transform op1, op2, 'left'
-        assert.deepEqual left, expectLeft
-      catch e
-        type.debug = true
-        printRepro op1, op2, 'left', expectLeft
-        transform op1, op2, 'left'
-        throw e
-
-      try
-        #printRepro op1, op2, 'right', expectRight
-        right = transform op1, op2, 'right'
-        assert.deepEqual right, expectRight
-      catch e
-        type.debug = true
-        printRepro op1, op2, 'right', expectRight
-        transform op1, op2, 'right'
-        throw e
-
     describe 'op1 pick', ->
       it 'vs delete', -> xf
         op1: [['x', p:0], ['y', d:0]]
@@ -671,31 +715,6 @@ describe 'json1', ->
         it 'transforms by p2 drops'
 
   describe 'transform-old', ->
-    xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
-      if expect != undefined then expectLeft = expectRight = expect
-
-      type.debug = !!debug
-
-      try
-        #printRepro op1, op2, 'left', expectLeft
-        left = transform op1, op2, 'left'
-        assert.deepEqual left, expectLeft
-      catch e
-        type.debug = true
-        printRepro op1, op2, 'left', expectLeft
-        transform op1, op2, 'left'
-        throw e
-
-      try
-        #printRepro op1, op2, 'right', expectRight
-        right = transform op1, op2, 'right'
-        assert.deepEqual right, expectRight
-      catch e
-        type.debug = true
-        printRepro op1, op2, 'right', expectRight
-        transform op1, op2, 'right'
-        throw e
-
     it 'foo', ->
       xf
         op1: [
@@ -911,3 +930,7 @@ describe 'json1', ->
         op1: [1, es:[2, 'hi']]
         op2: [1, r:"yo"]
         expect: null
+
+  describe 'fuzzer', -> it.skip 'runs my sweet!', ->
+    fuzzer = require 'ot-fuzzer'
+    fuzzer type, require './genOp'

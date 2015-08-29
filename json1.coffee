@@ -29,6 +29,8 @@
 
 assert = require 'assert'
 log = require './log'
+{readCursor, writeCursor} = cursor = require './cursor'
+deepEqual = require './deepEqual'
 
 isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
 
@@ -39,11 +41,11 @@ clone = (old) ->
 
   if Array.isArray old
     l = new Array old.length
-    l[i] = v for v, i in old
+    l[i] = clone(v) for v, i in old
     return l
   else if typeof old == 'object'
     o = {}
-    o[k] = v for k, v of old
+    o[k] = clone(v) for k, v of old
     return o
   else
     # Everything else in JS is immutable.
@@ -92,20 +94,20 @@ setC = (container, key, value) ->
   else
     setO container, key, value
 
-{readCursor, writeCursor} = cursor = require './cursor'
-
 # *********
 
 module.exports = type =
   name: 'json1'
   readCursor: readCursor
   writeCursor: writeCursor
+  create: (data) ->
+    if data == undefined then null else clone data
 
 subtypes = {}
-register = type.registerSubtype = (type) ->
-  type = type.type if type.type
-  subtypes[type.name] = type if type.name
-  subtypes[type.uri] = type if type.uri
+register = type.registerSubtype = (subtype) ->
+  subtype = subtype.type if subtype.type
+  subtypes[subtype.name] = subtype if subtype.name
+  subtypes[subtype.uri] = subtype if subtype.uri
 
 register require 'ot-text'
 
@@ -167,9 +169,9 @@ checkOp = type.checkValidOp = (op) ->
       else if k in ['e', 'es', 'en']
         assert !hasEdit
         hasEdit = true
-        type = getType e
-        assert type
-        type.checkValidOp? getEdit e
+        t = getType e
+        assert t
+        t.checkValidOp? getEdit e
 
       # And checks for the edit.
     assert !empty
@@ -234,7 +236,12 @@ type.apply = (snapshot, op) ->
   # is the right choice... immutable stuff is super nice.
   #
   # ????
-
+  log.quiet = true
+  log '*******************************************'
+  # snapshot = clone snapshot
+  # op = clone op
+  log 'apply', snapshot, op, typeof snapshot
+  # console.error snapshot, op
   checkOp op
 
   # Technically the snapshot should *never* be undefined, but I'll quietly
@@ -247,7 +254,7 @@ type.apply = (snapshot, op) ->
 
   # Phase 1: Pick
   pick = (subDoc, descent, isRoot) ->
-    # console.log 'pick', subDoc, descent, isRoot
+    log 'pick', subDoc, descent, isRoot
     if isRoot
       rootContainer = container = [subDoc]
       key = 0
@@ -281,16 +288,16 @@ type.apply = (snapshot, op) ->
       j--
 
     if isRoot
-      snapshot = rootContainer[0] || null
+      snapshot = rootContainer[0] ? null
 
   pick snapshot, op, true
 
-  # console.log '---- after pick phase ----'
-  # console.log held, snapshot
+  log '---- after pick phase ----'
+  log held, snapshot
 
   # Phase 2: Drop
   drop = (subDoc, descent, isRoot) ->
-    # console.log 'drop', subDoc, descent, isRoot
+    # log 'drop', subDoc, descent, isRoot
 
     if isRoot
       rootContainer = container = {s:snapshot}
@@ -312,11 +319,14 @@ type.apply = (snapshot, op) ->
         if d.d?
           subDoc = insertChild container, key, held[d.d]
         else if d.i != undefined
-          subDoc = insertChild container, key, d.i
+          if typeof key is 'string' and container[key]?
+            throw Error 'Cannot insert into non-empty child'
+          subDoc = insertChild container, key, clone d.i
 
-        if (type = getType d)
-          replacement = type.apply subDoc, getEdit d
-          subDoc = insertChild container, key, replacement
+        if (t = getType d)
+          replacement = t.apply subDoc, getEdit d
+          # We don't use insertChild here because its a replacement.
+          container[key] = replacement
         else if d.e != undefined
           throw Error "Subtype #{d.et} undefined"
       else
@@ -460,7 +470,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       # return k # -> raw
     ap2Pick._name = '2pick'
     ap2Drop = cursor.advancer p2Drop, (k, c) ->
-      return if hasDrop(c) then -(k - p2DropOff) else k - p2DropOff
+      return if hasDrop(c) then -(k - p2DropOff) - 1 else k - p2DropOff
     , (k, c) ->
       if hasDrop(c)
         p2DropOff++
@@ -594,7 +604,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
 
     ap1p = cursor.advancer p1Pick, (k, c) ->
       log 'ca map p1pick', k, c
-      return if hasPick(c) then -(k - p1PickOff) else k - p1PickOff
+      return if hasPick(c) then -(k - p1PickOff) - 1 else k - p1PickOff
     , (k, c) ->
       log 'ca p1pick', k, c
       if hasPick(c)
@@ -613,7 +623,8 @@ transform = type.transform = (oldOp, otherOp, direction) ->
     ap2p._name = '2p'
 
     ap2d = cursor.advancer p2Drop, (k, c) ->
-      return if hasDrop(c) then -(k - p2DropOff) else k - p2DropOff
+      log 'x', k, hasDrop(c), k - p2DropOff
+      return if hasDrop(c) then -(k - p2DropOff) - 1 else k - p2DropOff
     , (k, c) ->
       if hasDrop(c)
         p2DropOff++

@@ -214,7 +214,7 @@ makeCursor = (op = null) ->
           depth++
           @descend c
         else if Array.isArray c
-          @writeTree c
+          @mergeTree c
         else if typeof c is 'object'
           @write k, v for k, v of c
       @ascend() for [0...depth]
@@ -234,7 +234,7 @@ advancer = exports.advancer = (c, listMap, listAdvance, listCompare) ->
       if listMap and typeof k2 is 'number'
         k2 = listMap(k2, c.getComponent())
         if k2 < 0
-          k2 = -k2; skip = true
+          k2 = -k2 - 1; skip = true
       log 'advancer', fn._name, k, k2
       break if isGreaterKey(k2, k) or (!skip and k == k2) # break if k2 >= k
       listAdvance(k2, c.getComponent()) if listAdvance and typeof k2 is 'number'
