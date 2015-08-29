@@ -132,6 +132,16 @@ describe 'json1', ->
       fail [[1, r:{}], [2, r:{}], 5, r:{}]
       fail [[1, r:{}], [2, r:{}], r:{}]
 
+    it 'allows removes inside removes', ->
+      pass ['x', r:true, 'y', r:true]
+      pass ['x', r:{}, 'y', r:true]
+      pass [['x', r:true, 'y', p:0, 'z', r:true], ['y', d:0]]
+      pass [['x', r:{}, 'y', p:0, 'z', r:true], ['y', d:0]]
+
+    it 'allows inserts inside inserts', ->
+      pass [1, i:{}, 'x', i:10]
+      pass [[0, 'x', p:0], [1, i:{}, 'x', d:0, 'y', i:10]]
+
     describe 'edit', ->
       it 'requires all edits to specify their type', ->
         fail [{e:{}}]
@@ -242,12 +252,60 @@ describe 'json1', ->
       result = type.compose op1, op2
       assert.deepEqual result, expect
 
+    it 'composes empty ops to nothing', -> compose
+      op1: null
+      op2: null
+      expect: null
 
-    it 'composes empty ops to nothing', ->
-      compose
-        op1: null
-        op2: null
+    describe 'op1 drop', ->
+      it 'vs remove', -> compose
+        op1: [['x', p:0], ['y', d:0]]
+        op2: ['y', r:true]
+        expect: ['x', r:true]
+
+      it 'vs remove child', -> compose
+        op1: [['x', p:0], ['y', d:0]]
+        op2: ['y', 'a', r:true]
+        expect: [['x', p:0, 'a', r:true], ['y', d:0]]
+
+      it 'vs remove and pick child', -> compose
+        op1: [['x', p:0], ['y', d:0]]
+        op2: [['y', r:true, 'a', p:0], ['z', d:0]]
+        expect: [['x', r:true, 'a', p:0], ['z', d:0]]
+
+      it 'vs pick', -> compose
+        op1: [['x', p:0], ['y', d:0]]
+        op2: [['y', p:0], ['z', d:0]]
+        expect: [['x', p:0], ['z', d:0]]
+
+    describe 'op1 insert', ->
+      it 'vs remove', -> compose
+        op1: ['x', i:{a:'hi'}]
+        op2: ['x', r:true]
         expect: null
+
+      it 'vs remove child', -> compose
+        op1: ['x', i:{a:'hi', b:'woo'}]
+        op2: ['x', 'a', r:true]
+        expect: ['x', i:{b:'woo'}]
+
+      it 'vs remove and pick child', -> compose
+        op1: ['x', i:{a:'hi', b:'woo'}]
+        op2: [['x', r:true, 'a', p:0], ['y', d:0]]
+        expect: ['y', i:'hi']
+
+    describe 'op1 insert containing a drop', ->
+      it 'vs pick at insert', -> compose
+        op1: [['x', p:0], ['y', i:{}, 'x', d:0]]
+        op2: [['y', p:0], ['z', d:0]]
+        expect: [['x', p:0], ['z', i:{}, 'x', d:0]]
+
+
+  # *** Old stuff
+  describe.skip 'old compose', ->
+    compose = ({op1, op2, expect}) ->
+      result = type.compose op1, op2
+      assert.deepEqual result, expect
 
     it 'composes null and another op to that other op', ->
       t = (op) ->
@@ -267,12 +325,6 @@ describe 'json1', ->
         op1: [2, i:'hi']
         op2: [0, 'x', r:{}]
         expect: [[0, 'x', r:{}], [2, i:"hi"]]
-
-    it 'matches op1.dest -> op2.source', ->
-      compose
-        op1: [['x', p:0], ['y', d:0]]
-        op2: [['y', p:0], ['z', d:0]]
-        expect: [['x', p:0], ['z', d:0]]
 
     it 'translates drops in objects', ->
       compose
@@ -393,10 +445,10 @@ describe 'json1', ->
         op2: ['x', r:0, i:5]
         expect: null
 
-      it.skip 'vs pick, drop to self', -> xf
+      it 'vs pick, drop to self', -> xf
         op1: [['x', p:0], ['y', d:0]]
         op2: [['x', p:0], ['y', d:0]]
-        expect: null # or move onto itself, ie ['y', p:0, d:0] ?
+        expect: null
 
       it 'vs pick, drop', -> xf
         op1: [['x', p:0], ['z', d:0]] # x->z
@@ -539,6 +591,33 @@ describe 'json1', ->
         op2: ['z', i:10]
         expectLeft: ['z', r:true, i:5]
         expectRight: null
+
+      it 'vs identical insert', -> xf
+        op1: ['z', i:5]
+        op2: ['z', i:5]
+        expect: null
+
+      it 'vs embedded inserts', ->
+        xf
+          op1: ['x', i:{}]
+          op2: ['x', i:{}, 'y', i:5]
+          expect: null
+
+        xf
+          op1: ['x', i:{}, 'y', i:5]
+          op2: ['x', i:{}]
+          expect: ['x', 'y', i:5]
+
+        xf
+          op1: ['x', i:{}, 'y', i:5]
+          op2: ['x', i:{}, 'y', i:5]
+          expect: null
+
+        xf
+          op1: ['x', i:{}, 'y', i:5]
+          op2: ['x', i:{}, 'y', i:6]
+          expectLeft: ['x', 'y', r:true, i:5]
+          expectRight: null
 
     describe 'op1 edit', ->
       it 'vs delete', -> xf

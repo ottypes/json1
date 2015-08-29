@@ -15,20 +15,24 @@
 #
 # My TODO list:
 # - Feature parity with the old version
-# - Embedded subtypes
-# - Explicit embedding of string, number operations
-# - Compose function
+# - number operations
+# - compose()
+# - compose preserve invertable data
+# - makeInvertable and invert()
 # - Fuzzer, fix bugs
-# - Transform - fix list reverse transform code to look like list6.coffee
-# - Specify a backup move location in the op
-# - Transitive deletes in transform ('delete follows an escapee' test)
-# - Conversion between json1 ops and json0, json-patch.
 # - Port to JS.
+
+# - setNull = ??
+# - remove N items in a list
+# - a backup move location in the op
+# - Conversion between json1 ops and json0, json-patch.
 
 assert = require 'assert'
 log = require './log'
 
 isObject = (o) -> o && typeof(o) is 'object' && !Array.isArray(o)
+
+
 
 clone = (old) ->
   return null if old is null
@@ -119,6 +123,8 @@ getType = (component) ->
     return null
 
 getEdit = (component) -> return component.es || component.en || component.e
+
+# ******** checkOp
 
 checkOp = type.checkValidOp = (op) ->
   #console.log 'check', op
@@ -220,6 +226,7 @@ checkOp = type.checkValidOp = (op) ->
 
   #console.log '---> ok', op
 
+# ******* apply
 
 type.apply = (snapshot, op) ->
   # snapshot is a regular JSON object. It gets consumed in the process of
@@ -350,6 +357,8 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   heldOp2Drop = []
   cancelledOp2 = [] # op2 moves which have been cancelled.
 
+  op1PickAtOp2Pick = []
+
   nextSlot = 0
   # slotMap = []
 
@@ -358,53 +367,54 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   w = writeCursor()
 
   # ---------------------------------------------------------------------
-  scanOp2 = (p1, p2, removed) ->
-    # Scanning the other op looking for the pickup locations.
-    c1 = p1?.getComponent()
-    c2 = p2.getComponent()
-
-    if c1
+  scanOp2Pick = (p1, p2, removed) ->
+    # Scanning for a few things:
+    # - Marking cancelled op2 moves based on op1 removing things
+    # - Getting op2 drop read cursors
+    # - Figuring out which operations share pickup locations
+    if (c1 = p1?.getComponent())
       if c1.r != undefined then removed = true
       else if c1.p? then removed = false
 
-    if c2
-      if (slot = c2.p)?
-        log slot, c1, c2
-        cancelledOp2[slot] = true if removed
-
-      if (slot = c2.d)?
-        heldOp2Drop[slot] = p2.clone()
+    if (c2 = p2.getComponent()) and (slot2 = c2.p)?
+      log slot2, c1, c2
+      cancelledOp2[slot2] = true if removed
+      op1PickAtOp2Pick[slot2] = slot1 if (slot1 = c1?.p)?
 
     ap1 = cursor.advancer p1
     p2.eachChild (key) ->
       log 'in', key
-      scanOp2 ap1(key), p2, removed
+      scanOp2Pick ap1(key), p2, removed
       log 'out', key
     ap1.end()
 
-  scanOp2 p1, p2, false
-  log 'hd', (!!x for x in heldOp2Drop)
+  scanOp2Pick p1, p2, false
 
   # ---------------------------------------------------------------------
-  cancelOp2Drops = (p2, p1, w, removed) ->
-    removed = true if (c1 = p1?.getComponent())?.r != undefined
-    removed = false if c1?.p?
+  # This traverses op2's drop locations to cancel them.
+  scanOp2DropAndCancel = (p2, p1, w, removed) ->
+    if (c1 = p1?.getComponent())
+      removed = true if c1.r != undefined
+      removed = false if c1.p?
 
-    c2 = p2.getComponent()
-    if !removed and (slot = c2?.d)? and cancelledOp2[slot]
-      w.write 'r', true
-      # w.write 'r', 'cancelop2'
-      removed = true
+    if (c2 = p2.getComponent()) and (slot = c2.d)?
+      heldOp2Drop[slot] = p2.clone()
+
+      if !removed and cancelledOp2[slot]
+        w.write 'r', true
+        # w.write 'r', 'cancelop2'
+        removed = true
 
     ap1 = cursor.advancer p1
     p2.eachChild (key) ->
       w.descend key
-      cancelOp2Drops p2, ap1(key), w, removed
+      scanOp2DropAndCancel p2, ap1(key), w, removed
       w.ascend key
     ap1.end()
 
-  cancelOp2Drops(p2, p1, w, false) if cancelledOp2.length
+  scanOp2DropAndCancel p2, p1, w, false
   w.reset()
+  log 'hd', (!!x for x in heldOp2Drop)
 
   # ---------------------------------------------------------------------
 
@@ -501,29 +511,51 @@ transform = type.transform = (oldOp, otherOp, direction) ->
       p1Pick = heldOp1Pick[slot1] if slot1?
       if c1d.i != undefined or (slot1? and (pc = pickComponents[slot1]))
         # log 'rr', !removed, side == LEFT, !hasDrop(c2d), c2d, cancelledOp2[c2d.d]
-        if !removed and (side == LEFT || !hasDrop(c2d) || (c2d?.d? and cancelledOp2[c2d.d]))
-          # Copy the drops
-          if c1d.d?
-            w.write 'd', pc.p = nextSlot++
-            droppedHere = true
-            # pickComponent[c1.d] = null
-          else if c1d.i != undefined
-            w.write 'i', clone c1d.i
-            droppedHere = true
 
-          assert w.getComponent().r if hasDrop(c2d) and (c1d.d? and cancelledOp2[c1d.d])
+        # Times to write:
+        # - There is no c2 drop
+        # - The other drop has been cancelled
+        # - We are left (and then we also need to remove)
+        # If we are identical, skip everything. Neither write nor remove.
 
-          if hasDrop c2d then w.write 'r', true # I fart in your general direction
-          # if hasDrop c2d then w.write 'r', 'overwrite'
+        # Doing this with logical statements was too hard. This just sets up
+        # some state variables which are used in conditionals below.
+        write = true
+        identical = false
+        if c2d
+          if (slot2 = c2d.d)?
+            if cancelledOp2[slot2]
+              write = true
+            else
+              write = side == LEFT
+              identical = slot1? and slot1 == op1PickAtOp2Pick[slot2]
 
-        else
-          log "Halp! We're being overwritten!"
-          pc.r = true if pc
-          removed = true
+          else if (inserted = c2d.i) != undefined
+            identical = deepEqual(inserted, c1d.i)
+            write = side == LEFT
+
+        if !identical
+          if !removed and write
+            # Copy the drops
+            if c1d.d?
+              w.write 'd', pc.p = nextSlot++
+              droppedHere = true
+              # pickComponent[c1.d] = null
+            else if c1d.i != undefined
+              w.write 'i', clone c1d.i
+              droppedHere = true
+
+            assert w.getComponent().r if hasDrop(c2d) and (c1d.d? and cancelledOp2[c1d.d])
+
+            if hasDrop c2d then w.write 'r', true # I fart in your general direction
+            # if hasDrop c2d then w.write 'r', 'overwrite'
+
+          else
+            log "Halp! We're being overwritten!"
+            pc.r = true if pc
+            removed = true
       else if c1d.d? and !pickComponents[c1d.d]
         removed = true # I'm not 100% sure this is the right way to implement this logic...
-
-
 
     if (c2p = p2Pick?.getComponent())
       if (slot = c2p.p)?
@@ -645,9 +677,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   w.reset()
 
   # ---------------------------------------------------------------------
-
   # Now we need to fill in the moved writes.
-
   emplaceWrites = (p2Drop, w) ->
     if (c2 = p2Drop.getComponent()) and (slot = c2.d)?
       _w = heldWrites[slot]

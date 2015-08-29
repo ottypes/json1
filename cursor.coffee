@@ -101,17 +101,6 @@ makeCursor = (op = null) ->
       c._configure container, idx
       return c
 
-    getKList: (predicate) ->
-      return EMPTY_LIST unless @descendFirst()
-      keys = null
-      loop
-        key = @getKey()
-        if typeof key is 'number' and (c = @getComponent()) and predicate(c)
-          keys = [] if keys is null
-          keys.push key
-        break unless @nextSibling()
-      @ascend()
-
     _print: (prefix) ->
       {inspect} = require 'util'
       if (c = @getComponent())
@@ -218,6 +207,7 @@ makeCursor = (op = null) ->
     mergeTree: (data) ->
       return if data is null
       assert Array.isArray data
+      _lcIdx = lcIdx
       depth = 0
       for c in data
         if typeof c in ['string', 'number']
@@ -228,6 +218,7 @@ makeCursor = (op = null) ->
         else if typeof c is 'object'
           @write k, v for k, v of c
       @ascend() for [0...depth]
+      lcIdx = _lcIdx
 
 
 writeCursor = exports.writeCursor = (op) -> makeCursor(op).write()
