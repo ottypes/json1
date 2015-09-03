@@ -346,7 +346,6 @@ type.apply = (snapshot, op) ->
 
 LEFT = 0
 RIGHT = 1
-{getKList} = cursor
 
 transform = type.transform = (oldOp, otherOp, direction) ->
   assert direction in ['left', 'right']
@@ -532,6 +531,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         # some state variables which are used in conditionals below.
         write = true
         identical = false
+        log 'looking to write', c1d, c2d, cancelledOp2
         if c2d
           if (slot2 = c2d.d)?
             if cancelledOp2[slot2]
@@ -602,76 +602,111 @@ transform = type.transform = (oldOp, otherOp, direction) ->
     p2PickOff = p2DropOff = 0
     outPickOff = outDropOff = 0
 
-    ap1p = cursor.advancer p1Pick, (k, c) ->
-      log 'ca map p1pick', k, c
-      return if hasPick(c) then -(k - p1PickOff) - 1 else k - p1PickOff
-    , (k, c) ->
-      log 'ca p1pick', k, c
-      if hasPick(c)
-        p1PickOff++
-        log 'p1Pick++', p1PickOff, k, c
-        # Basically, if it wasn't cancelled.
-        # I'm not sure if its possible for a p1 pick to be cancelled here. I can't figure out how to write a test case which requires this conditional.
-        outPickOff++ # if c.r != undefined or pickComponents[c.p]
-
-    ap1p._name = '1p'
+    p1pValid = p1pDidDescend = p1Pick?.descendFirst()
 
     ap2p = cursor.advancer p2Pick, null, (k, c) ->
       if hasPick(c)
         p2PickOff++
         log 'p2Pick++', p2PickOff, k, c
     ap2p._name = '2p'
+    # p2pValid = p2pDidDescend = p2Pick?.descendFirst()
 
-    ap2d = cursor.advancer p2Drop, (k, c) ->
-      log 'x', k, hasDrop(c), k - p2DropOff
-      return if hasDrop(c) then -(k - p2DropOff) - 1 else k - p2DropOff
-    , (k, c) ->
-      if hasDrop(c)
-        p2DropOff++
-        # We've added a remove to cancel the op.
-        outPickOff++ if c.d? and cancelledOp2[c.d]
-        log 'p2Drop++', p2DropOff, k, c
+    p2dValid = p2dDidDescend = p2Drop?.descendFirst()
 
-    ap2d._name = '2d'
 
     log 'children.', '1p:', !!p1Pick, '1d:', !!p1Drop, '2p:', !!p2Pick
 
     p1Drop.eachChild (key) ->
       # hookaaay....
       if typeof key is 'string'
-        _p1Pick = ap1p key
+        while p1pValid
+          p1k = p1Pick.getKey()
+          break if typeof p1k is 'string' and (p1k > key or p1k == key)
+          p1pValid = p1Pick.nextSibling()
+        _p1Pick = if p1pValid and p1k == key then p1Pick else null
+
+        # _p1Pick = ap1p key
         _p2Pick = ap2p key
-        _p2Drop = ap2d key
+        # _p2Drop = ap2d key
+        while p2dValid
+          p2dk = p2Drop.getKey()
+          break if typeof p2dk is 'string' and (p2dk > key or p2dk == key)
+          p2dValid = p2Drop.nextSibling()
+        _p2Drop = if p2dValid and p2dk == key then p2Drop else null
         w.descend key
         opDrop _p1Pick, p1Drop, _p2Pick, _p2Drop, w, removed
         w.ascend key
       else
         log 'p1DropEachChild k:', key,
-          'p1p:', p1PickOff, 'p1d:', p1DropOff,
+          'p1d:', p1DropOff, 'p1p:', p1PickOff,
           'p2p:', p2PickOff, 'p2d:', p2DropOff,
           'op:', outPickOff, 'od:', outDropOff
+
+        iHaveDrop = hasDrop p1Drop.getComponent()
+
         k1Mid = key - p1DropOff
-        _p1Pick = ap1p k1Mid # Advances p1PickOff.
+        # _p1Pick = ap1p k1Mid # Advances p1PickOff.
+
+        do ->
+          while p1pValid and typeof (p1k = p1Pick.getKey()) is 'number'
+            p1k -= p1PickOff
+            hp = hasPick (c = p1Pick.getComponent())
+            log 'p1k', p1k, 'k1mid', k1Mid, 'hp', hp
+            break if p1k > k1Mid or (p1k == k1Mid and (!hp or (side == LEFT and iHaveDrop)))
+            # break if p1k == k1Mid and iHaveDrop
+            # increment if p2k < k1Mid
+            if hp
+              log 'plus plus'
+              p1PickOff++
+              outPickOff++ #if c.r != undefined or pickComponents[c.p]
+            p1pValid = p1Pick.nextSibling()
+          _p1Pick = if p1pValid and p1k == k1Mid then p1Pick else null
+
+
         raw = k1Mid + p1PickOff
         _p2Pick = ap2p raw # Advances p2PickOff.
+
         k2Mid = raw - p2PickOff
-        _p2Drop = ap2d if side is LEFT and hasDrop(p1Drop.getComponent())
-          k2Mid-1
-        else
-          k2Mid
+
+        do ->
+          while p2dValid and typeof (p2dk = p2Drop.getKey()) is 'number'
+            p2dk -= p2DropOff
+            hd = hasDrop (c = p2Drop.getComponent())
+            log 'p2d scan', p2dk, p2DropOff, k2Mid, hd, iHaveDrop
+            break if p2dk > k2Mid
+
+            # This works, but is harder to read
+            # break if p2dk == k2Mid and (!hd or (side is LEFT and iHaveDrop))
+            if p2dk == k2Mid
+              break if side is LEFT and iHaveDrop or !hd
+              break if side is RIGHT and !hd
+            log 'p2d continuing'
+            if hd
+              p2DropOff++
+              outPickOff++ if (slot = c.d)? and cancelledOp2[slot]
+              log 'p2Drop++', p2DropOff, p2dk, c
+            p2dValid = p2Drop.nextSibling()
+          _p2Drop = if p2dValid and p2dk == k2Mid then p2Drop else null
+
+        # _p2Drop = ap2d if side is LEFT and hasDrop(p1Drop.getComponent())
+        #   log 'mid-1'
+        #   k2Mid-1
+        # else
+        #   log 'mid'
+        #   k2Mid
 
         k2Final = k2Mid + p2DropOff
 
         log '->DropEachChild k:', key,
-          'p1p:', p1PickOff, 'p1d:', p1DropOff,
+          'p1d:', p1DropOff, 'p1p:', p1PickOff, 'raw:', raw
           'p2p:', p2PickOff, 'p2d:', p2DropOff,
           'op:', outPickOff, 'od:', outDropOff,
 
-        log "k: #{key} -> mid #{k1Mid} -> raw #{raw} -> k2Mid #{k2Mid} -> k2Final #{k2Final}"
+        log "k: #{key} -> mid #{k1Mid} -> raw #{raw} -> k2Mid #{k2Mid} -> k2Final #{k2Final} -> descend #{k2Final - outPickOff + outDropOff}"
 
         w.descend k2Final - outPickOff + outDropOff
 
-        if hasDrop p1Drop.getComponent()
+        if iHaveDrop
           # If we drop here
           _p1Pick = _p2Pick = _p2Drop = null
           log 'omg p1dropoff', p1DropOff
@@ -680,7 +715,12 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         outDropOff++ if opDrop _p1Pick, p1Drop, _p2Pick, _p2Drop, w, removed
         w.ascend()
 
-    ap1p.end(); ap2p.end(); ap2d.end()
+    # p2Pick.ascend() if p2pDidDescend
+    ap2p.end()
+    # ap1p.end()
+    p1Pick.ascend() if p1pDidDescend
+    # ap2d.end()
+    p2Drop.ascend() if p2dDidDescend
     return droppedHere
 
   log '----- drop -----'
