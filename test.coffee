@@ -269,7 +269,7 @@ describe 'json1', ->
       op: [['x', p:0], ['y', d:0, es:['sup']]]
       expect: {y: "supyooo"}
 
-  describe.only 'regressions', ->
+  describe 'regressions', ->
     it 'asdf', -> apply
       doc: { the: '', Twas: 'the' }
       op: [ 'the', { es: [] } ]
@@ -300,7 +300,8 @@ describe 'json1', ->
       -> xf
         op1: [0,{"p":0,"d":0}]
         op2: [0,{"p":0,"d":0}]
-        expect: null
+        expectLeft: [0,{"p":0,"d":0}] # This is a bit weird.
+        expectRight: null
 
       -> xf
         op1: [0, r:true, i:'a']
@@ -313,6 +314,27 @@ describe 'json1', ->
         op2: [0, r:true]
         expect: [0, i:5]
 
+    it 'p1 pick descends correctly', ->
+      xf
+        op1: [2, r:true, 1, es:['hi']]
+        op2: [3, 1, r:true]
+        expect: [2, r:true]
+
+      xf
+        op1: [[2, r:true, 1, es:['hi']], [3, 1, r:true]]
+        op2: [3, 2, r:true]
+        expect: [[2, r:true], [3, 1, r:true]]
+
+    it 'transforms picks correctly', -> xf
+      op1: [1, 1, r:true]
+      op2: [0, p:0, d:0]
+      expect: [1, 1, r:true]
+
+    it 'something else', -> xf
+      op1: [0, p:0,d:0]
+      op2: [1, i:"hi"]
+      expectLeft: [0, p:0,d:0]
+      expectRight: [[0, p:0], [1, d:0]]
 
 # ******* Compose *******
 
@@ -489,10 +511,16 @@ describe 'json1', ->
         op2: ['x', r:0, i:5]
         expect: null
 
-      it 'vs pick, drop to self', -> xf
-        op1: [['x', p:0], ['y', d:0]]
-        op2: [['x', p:0], ['y', d:0]]
-        expect: null
+      it 'vs pick, drop to self',
+        -> xf
+          op1: [['x', p:0], ['y', d:0]]
+          op2: [['x', p:0], ['y', d:0]]
+          expect: null
+
+        -> xf
+          op1: [['a', 1, p:0], ['y', d:0]]
+          op2: [['a', 1, p:0], ['y', d:0]]
+          expect: null
 
       it 'vs pick, drop', -> xf
         op1: [['x', p:0], ['z', d:0]] # x->z
