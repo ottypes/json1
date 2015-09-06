@@ -330,11 +330,17 @@ describe 'json1', ->
       op2: [0, p:0, d:0]
       expect: [1, 1, r:true]
 
-    it 'something else', -> xf
-      op1: [0, p:0,d:0]
+    it 'pick & drop vs insert after the picked item', -> xf
+      op1: [0, p:0,d:0] # Remove / insert works the same.
       op2: [1, i:"hi"]
       expectLeft: [0, p:0,d:0]
       expectRight: [[0, p:0], [1, d:0]]
+
+    it.skip 'pick same item vs shuffle list', -> xf
+      op1: [1, ['x', p:0], ['y', d:0]]
+      op2: [1, {d:0}, 'x', {p:0}]
+      expectLeft: [1, p:0, 'y', d:0]
+      expectRight: null
 
 # ******* Compose *******
 

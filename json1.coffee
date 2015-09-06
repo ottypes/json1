@@ -683,7 +683,9 @@ transform = type.transform = (oldOp, otherOp, direction) ->
             log 'p2d continuing'
             if hd
               p2DropOff++
-              outPickOff++ if (slot = c.d)? and cancelledOp2[slot]
+              # Ugh to reimplementing the logic of figuring out where I've
+              # added picks.
+              outPickOff++ if (slot = c.d)? and (cancelledOp2[slot] or (op1PickAtOp2Pick[slot]? and side == LEFT))
               log 'p2Drop++', p2DropOff, p2dk, c
             p2dValid = p2Drop.nextSibling()
           _p2Drop = if p2dValid and p2dk == k2Mid then p2Drop else null

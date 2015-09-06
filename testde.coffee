@@ -35,3 +35,6 @@ describe 'deepEqual', ->
       y {x:5}, {x:5}
       n {x:6}, {x:5}
       y {x:[]}, {x:[]}
+
+    it 'regressions', ->
+      n {}, null
