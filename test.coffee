@@ -642,10 +642,31 @@ describe 'json1', ->
         expectRight: ['x', r:true]
 
       it 'vs pick (a->b->c vs b->x)', -> xf
-        op1: [['a', p:0], ['b', p:1, d:0], ['c', d:1]]
+        op1: [['a', p:0], ['b', {p:1, d:0}], ['c', d:1]]
         op2: [['b', p:0], ['x', d:0]]
         expectLeft: [['a', p:0], ['b', d:0], ['c', d:1], ['x', p:1]]
         expectRight: [['a', p:0], ['b', d:0]]
+
+      describe.skip 'vs move inside me', ->
+        it 'in objects', -> xf
+          op1: [['x', p:0], ['y', 'a', d:0]]
+          op2: [['x', 'a', d:0], ['y', p:0]]
+          expectLeft: [['x', p:0, 'a', p:1], ['y', d:1, 'x', d:0]]
+          expectRight: null
+
+        it 'in lists', -> xf
+          op1: [0, p:0, 'x', d:0]
+          op2: [[0, 'y', d:0], [1, p:0]]
+          expectLeft: [0, {p:0, d:1}, ['x', d:0], ['y', p:1]]
+          expectRight: null
+
+        it 'multiple', -> xf
+          # a->x.a, b->x.b
+          op1: [['a', p:0], ['b', p:1], ['x', 'a', d:0, 'b', d:1]]
+          op2: [['a', 'x', d:0], ['x', p:0]] # x->a.x
+          expectLeft: [['a', p:0, 'x', p:1], ['b', p:2],
+            ['x', d:1, ['a', d:0], ['b', d:2]]]
+          expectRight: null
 
     describe 'op1 insert', ->
       it 'vs delete parent', -> xf
