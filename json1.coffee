@@ -343,6 +343,185 @@ type.apply = (snapshot, op) ->
 
   return snapshot
 
+# ****** Compose
+
+compliment = (x) -> -x - 2
+
+type._compose = (op1, op2) ->
+  checkOp op1
+  checkOp op2
+  debug = type.debug
+  if debug
+    console.log "composing:"
+    console.log '  op1:', JSON.stringify(op1)
+    console.log '  op2:', JSON.stringify(op2)
+
+  # Read cursors
+  op1DropBy1 = [] # null if removed by p2
+  op2PickBy1 = []
+
+  op1DropBy2 = []
+  op2PickBy2 = []
+
+
+  op1DeleteMove = [] # true if drop removed by op2.
+
+  # Because there's no other way (and js maps aren't ready yet at
+  # time of writing), the insert data is stored in a list indexed
+  # by the strict order of the operation itself.
+  # This stores clones of the inserted data, which has then been
+  # modified by op2's picks & removes.
+  op1Inserts = [] # undefined if removed
+  op1LiteralAtP2 = []
+  op2LiteralIdx = []
+
+  # There's fundamentally 3 actions we need to take:
+  # - scan the boundary
+  # - write picks
+  # - write drops
+
+  scanD1Literal = (obj, p2) -> # Returns the modified literal
+    log 'scanBoundaryLiteral', obj
+    expectKeyType = if isObject obj
+      'string'
+    else if Array.isArray obj
+      'number'
+    else
+      null
+
+    offset = 0
+    p2.eachChild (key) ->
+      assert.strictEqual typeof(key), expectKeyType
+      key -= offset if expectKeyType is 'number'
+
+      _obj = scanBoundaryLiteral obj[key], p2
+
+      if _obj is undefined
+        removeChild obj, key
+        offset++ if typeof key is 'number'
+
+    if (c = p2.getComponent())
+      if c.r != undefined
+        log '->removed'
+        return undefined
+      else if (slot = c.p)?
+        op1LiteralAtP2[slot] = obj
+        log "->picked #{slot}"
+        return undefined
+
+    log '->anBoundaryLiteral', obj
+    return obj
+
+  scanBoundary = (d1, p2, removedP2) ->
+    # Traversing in boundary order
+    cd1 = d1?.getComponent()
+    cp2 = p2?.getComponent()
+
+    if cp2
+      if cp2.r != undefined
+        removedP2 = true
+      else if (slot2 = cp2.p)?
+        removedP2 = false
+        op1DropBy2[slot2] = d1?.clone()
+        op2PickBy2[slot2] = p2?.clone()
+        op2LiteralIdx = op1Inserts.length
+
+    if cd1
+      if (slot1 = cd1.d)?
+        if !removedP2
+          op1DropBy1[slot1] = d1?.clone()
+          op2PickBy1[slot1] = p2?.clone()
+      else if cd1.i != undefined
+        if removedP2
+          op1Inserts.push undefined
+        else
+          # scanD1Literal will also fill op1LiteralAtP2
+          insert = scanD1Literal clone(cd1.i), p2
+          op1Inserts.push insert
+
+    cursor.eachChildOf d1, p2, null, null, (key, _d1, _p2) ->
+      scanP2 _d1, p2, removedP2
+
+  readOp1 = readCursor op1
+  readOp2 = readCursor op2
+  scanP2 readOp1, readOp2, false
+
+
+  numUsedSlots = 0
+  # slotMap1 = [] #   # -1 if removed.
+  slotMap2 = []
+
+  writePick = (p1, d1, p2, w, removedP2) ->
+    # Basically we're merging p1 and p2 into w, with some tweaks.
+    # Traversing in p1 order.
+    p1c = p1?.getComponent()
+
+    if p1c
+      if (slot1 = p1c.p)?
+        p2 = op2PickBy1[slot1]
+        d1 = op1DropBy1[slot1]
+
+    d1c = d1?.getComponent()
+    p2c = p2?.getComponent()
+
+    # They can't both have picks. That would be outragous!
+    assert !(hasPick(p1c) && hasPick(p2c)) if !hasDrop d1c
+    assert hasPick(p1c) if hasDrop(d1c)
+
+    if p2c
+      if p2c.r != undefined
+        removedP2 = true
+      else if (slot2 = p2c.p)?
+        removedP2 = false
+
+
+        if !d1
+          # The drop was removed.
+          w.write 'r', true unless removedP2
+        else if (slot2 = p2.p)?
+          # Conjoin.
+          finalSlot = numUsedSlots++
+          slotMap2[slot2] = finalSlot
+          w.write 'p', finalSlot
+          removedP2 = false
+
+    cursor.eachChildOf p1, p2, null, null, (key, _p1, _p2) ->
+
+
+
+
+
+  readOp1 = readCursor op1
+  readOp2 = readCursor op2
+  scanBoundary readOp1, readOp2, false
+
+  log 'slotMap1:', slotMap1, 'slotMap2:', slotMap2
+  # log 'insertForDrop2:', insertForDrop2
+
+  log 'read for p1:'
+  for _r, slot in readForP1 when _r
+    log slot
+    _r.print()
+
+  log 'read for d2:'
+  for _r, slot in readForD2 when _r
+    log slot
+    _r.print()
+
+  log '---------'
+
+
+  w = writeCursor()
+  writePick readOp1, readOp2, w, false
+  w.reset()
+
+
+  result = w.get()
+  log '->', result
+  # checkOp result
+  return result
+
+# ****** transform
 
 LEFT = 0
 RIGHT = 1
