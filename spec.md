@@ -45,6 +45,8 @@ The operation itself looks like a single traversal, but the traversal is actuall
 
 Just like JSON0, when you edit a list, the list is spliced. So for example, if you have a list with `[1,2,3]` and discard the second element, the list will become `[1,3]`. If you then insert 5 at the start of the list, the list will become `[5,1,3]`. If you don't want this behaviour, use an object.
 
+
+
 ### Some examples.
 
 Given a document of:

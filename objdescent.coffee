@@ -58,6 +58,8 @@ hasDrop = (op) -> op && (op.d? || op.di != undefined)
 module.exports = type =
   name: 'json1'
 
+type.debug = true if process.env.DEBUG
+
 eachChild = (op, fn) ->
   fn k, child for k, child of op.o if op.o
   fn k, child for k, child of op.l if op.l
@@ -138,7 +140,7 @@ type.apply = (snapshot, op) ->
   # is the right choice... immutable stuff is super nice.
   #
   # ????
-  
+
   held = []
   # Phase 1: Pick.
   pick = (subDoc, subOp) ->
@@ -207,8 +209,10 @@ xfListReverse = (keys, list) ->
   prevDestIdx = -1 # for debugging
 
   cursor = {raw:0, offset:0}
- 
+
+  # console.log 'xfListReverse!', keys, list
   (destIdx) ->
+    # console.log '!', keys, destIdx
     assert destIdx >= prevDestIdx
     prevDestIdx = destIdx
 
@@ -217,9 +221,11 @@ xfListReverse = (keys, list) ->
       dropOffset++ if list[k].d? or (list[k].di != undefined)
 
     d2 = destIdx - dropOffset
+    # console.log 'd2', d2
     assert d2 >= 0
 
     while pickKeyPos < keys.length and (k = keys[pickKeyPos]) - pickOffset <= d2
+      # assert !(k - pickOffset == d2 and hasDrop(list[k]))
       break if k - pickOffset == d2 and hasDrop(list[k])
       pickKeyPos++
       pickOffset++ if list[k].p != undefined
@@ -276,7 +282,7 @@ xfMap = (keys, list, pickSide) ->
 xfDrop = (opKeys, op, otherKeys, otherOp, side) ->
   toRaw = xfListReverse opKeys, op
   rawToOther = xfMap otherKeys, otherOp, LEFT
-  cursor = {otherIdx:0, finalIdx:0}
+  # cursor = {otherIdx:0, finalIdx:0}
 
   (opIdx) ->
     iHaveDrop = hasDrop op[opIdx]
@@ -286,10 +292,10 @@ xfDrop = (opKeys, op, otherKeys, otherOp, side) ->
 
     console.log "#{side} #{opIdx} -> #{rawIdx} do: #{offset} -> #{otherIdx} (#{otherIdx + offset})" if type.debug
 
-    cursor.otherIdx = if iHaveDrop then null else otherIdx
-    cursor.finalIdx = otherIdx + offset
-    console.log cursor if type.debug
-    
+    # cursor.otherIdx = if iHaveDrop then null else otherIdx
+    # cursor.finalIdx = otherIdx + offset
+    # console.log cursor if type.debug
+
     otherIdx + offset
 
 addOChild = (dest, key, child) ->
@@ -386,7 +392,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
 
     return dest
 
-    
+
   op = pick oldOp, otherOp
 
   console.log '---- drop phase ---- -> held:', held, op if debug
@@ -471,7 +477,7 @@ transform = type.transform = (oldOp, otherOp, direction) ->
         child = drop dest?.l?[xfIdx], opChild, otherChild
         dest = addLChild dest, xfIdx, child
 
-         
+
     console.log 'drop returning', dest if debug
     return dest
 
@@ -534,7 +540,7 @@ compose = type.compose = (op1, op2) ->
 
     # Loop over op1 and op2, copying op1's drops into the result. When op2 does
     # a pickup, grab anything in the child tree and hold it.
-    
+
     if hasDrop c1
       throw Error '???' if dest?
       dest ?= {}
@@ -585,4 +591,4 @@ if require.main == module
 
   #console.log compose op1, op2
 
-  transform {"l":{"2":{"di":"hi"}}}, {"l":{"2":{"p":null,"di":"other"}}}, 'right'
+  transform {o:{a:{e:'edit'}}}, {o:{a:{p:0}}, di:[], l:{0:{d:0}}}, 'right'

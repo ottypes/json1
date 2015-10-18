@@ -1,5 +1,5 @@
 assert = require 'assert'
-type = require './json1'
+type = require './objdescent'
 
 {transform} = type
 
@@ -65,7 +65,7 @@ describe 'json1', ->
         doc: null
         op: {di:5}
         expect: 5
-        
+
       apply
         doc: []
         op: {l:0:{di:17}}
@@ -218,6 +218,11 @@ describe 'json1', ->
         op2: {o:{x:{p:0}, y:{d:0}}}
         expect: {o:{y:{e:'edit'}}}
 
+      it.skip 'can move an insert', -> xf
+        op1: {o:{x:{di:'hi'}}}
+        op2: {o:{x:{p:0}, y:{d:0}}}
+        expect: {o:{y:{di:'hi'}}}
+
       it 'can reparent with some extra junk', -> xf
         op1: {o:{x:{p:0}, y:{d:0}}}
         op2:
@@ -297,14 +302,14 @@ describe 'json1', ->
 
     describe 'lists', ->
 
-      it 'can rewrite simple list indexes', -> xf
+      it.only 'can rewrite simple list indexes', -> xf
         op2: {l:{0:{di:'oh hi'}}}
         op1: {l:{10:{e:'edit'}}}
         expect: {l:{11:{e:'edit'}}}
 
-      it 'can change the root from an object to a list', -> xf
+      it.skip 'can change the root from an object to a list', -> xf
         op1: {o:{a:{e:'edit'}}}
-        op2: {o:{a:{p:0}}, di:[], l:{0:{d:0}}}
+        op2: {o:{a:{p:0}}, p:null, di:[], l:{0:{d:0}}}
         expect: {l:{0:{e:'edit'}}}
 
       it 'can handle adjacent drops', -> xf
