@@ -1,0 +1,31 @@
+{
+  "name": "ot-json1",
+  "version": "1.0.0",
+  "description": "JSON OT type",
+  "main": "index.js",
+  "dependencies": {
+    "ot-text": "^1.0.1"
+  },
+  "devDependencies": {
+    "mocha": "^2.3.3",
+    "ot-simple": "^1.0.0",
+    "ot-fuzzer": "^1.0.0"
+  },
+  "scripts": {
+    "test": "mocha --compilers coffee:coffee-script/register --reporter spec test.coffee"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josephg/json1.git"
+  },
+  "keywords": [
+    "ot",
+    "json"
+  ],
+  "author": "Joseph Gentle <me@josephg.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/josephg/json1/issues"
+  },
+  "homepage": "https://github.com/josephg/json1#readme"
+}
