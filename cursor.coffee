@@ -244,3 +244,31 @@ advancer = exports.advancer = (c, listMap, listAdvance, listCompare) ->
   fn.end = ->
     if didDescend then c.ascend()
   return fn
+
+
+exports.eachChildOf = (c1, c2, listMap1, listMap2, fn) ->
+  hasChild1 = descended1 = c1?.descendFirst()
+  hasChild2 = descended2 = c2?.descendFirst()
+
+  while hasChild1 || hasChild2
+    k1 = if hasChild1 then c1.getKey() else null
+    k2 = if hasChild2 then c2.getKey() else null
+
+    k1 = listMap1 k1 if listMap1 && typeof k1 is 'number'
+    k2 = listMap2 k2 if listMap2 && typeof k2 is 'number'
+
+    # console.log 'k1k2', k1, k2
+
+    if k1 != null and k2 != null
+      if isGreaterKey k2, k1
+        k2 = null
+      else if k1 != k2
+        k1 = null
+
+    # fn key, c1 or null, c2 or null
+    fn (if k1 == null then k2 else k1), (c1 if k1 != null), (c2 if k2 != null)
+    hasChild1 = c1.nextSibling() if k1 != null and hasChild1
+    hasChild2 = c2.nextSibling() if k2 != null and hasChild2
+
+  c1.ascend() if descended1
+  c2.ascend() if descended2

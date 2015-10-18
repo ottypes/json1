@@ -932,6 +932,27 @@ transform = type.transform = (oldOp, otherOp, direction) ->
   return result
 
 
+
 if require.main == module
   type.debug = true
-  transform [["x",{"r":true}],["y",3,{"i":5}]], [["x","a",{"p":0}],["y",2,{"d":0}]], 'left'
+  # transform [[0,"jaws",1,"its",{"d":0}],[1,{"p":0}]], [[0,"jaws",1,"in",{"d":0}],[1,{"p":0}]], 'left'
+
+  transformX = (left, right) ->
+    [transform(left, right, 'left'), transform(right, left, 'right')]
+
+  # transformX [0, {p: 0}, 'x', {d: 0}],
+  #            [[0, 'y', {d: 0}], [1, {p: 0}]]
+
+  transformX [['x', p:0], ['y', 'a', d:0]],
+    [['x', 'a', d:0], ['y', p:0]]
+
+
+  # Correct
+  # transform [1, 'x', r:true],
+  #           [1, {d:0}, 'x', {p:0}], 'left'
+
+  # transform [1, 'y', i:'hi'],
+  #           [1, {d:0}, 'x', {p:0}], 'left'
+
+
+type.debug = !!process.env['DEBUG']
