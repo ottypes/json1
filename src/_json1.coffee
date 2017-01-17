@@ -1,3 +1,6 @@
+# *** Currently being ported to JS in json1.js.
+
+
 # This is the JSON OT type implementation. It is a successor to JSON0
 # (https://github.com/ottypes/json0), better in a bunch of ways.
 #
@@ -75,25 +78,6 @@ insertChild = (container, key, value) ->
 
   return value
 
-
-setO = (obj, key, value) ->
-  if value is undefined
-    delete obj[key]
-  else
-    obj[key] = value
-
-setA = (arr, idx, value) ->
-  if value is undefined
-    arr.splice idx, 1
-  else
-    arr[idx] = value
-
-setC = (container, key, value) ->
-  if typeof key is 'number'
-    setA container, key, value
-  else
-    setO container, key, value
-
 # *********
 
 module.exports = type =
@@ -126,226 +110,8 @@ getType = (component) ->
 
 getEdit = (component) -> return component.es || component.en || component.e
 
-# ******** checkOp
-
-checkOp = type.checkValidOp = (op) ->
-  #console.log 'check', op
-  return if op is null
-
-  # I really want to use ES6 Set for these :p
-  numPickSlots = numDropSlots = 0
-  pickedSlots = {}
-  droppedSlots = {}
-
-  checkNonNegInteger = (n) ->
-    assert typeof n is 'number'
-    assert n >= 0
-    assert n == (n|0)
-
-  checkScalar = (s) ->
-    if typeof s is 'number'
-      checkNonNegInteger s
-    else
-      assert typeof s is 'string'
-
-  checkComponent = (e) ->
-    empty = true
-    hasEdit = false
-    for k, v of e
-      empty = false
-      assert k in ['p', 'r', 'd', 'i', 'e', 'es', 'en', 'et']
-      if k is 'p'
-        checkNonNegInteger v
-        assert !pickedSlots[v]
-        pickedSlots[v] = true
-        numPickSlots++
-        assert e.r is undefined
-      else if k is 'd'
-        checkNonNegInteger v
-        assert !droppedSlots[v]
-        droppedSlots[v] = true
-        numDropSlots++
-        assert e.i is undefined
-      else if k in ['e', 'es', 'en']
-        assert !hasEdit
-        hasEdit = true
-        t = getType e
-        assert t
-        t.checkValidOp? getEdit e
-
-      # And checks for the edit.
-    assert !empty
-
-  SCALAR=1; EDIT=2; DESCENT=3
-  checkDescent = (descent, isRoot) ->
-    throw Error 'Op must be null or a list' unless Array.isArray descent
-    throw Error 'Empty descent' unless descent.length >= 1
-    checkScalar descent[0] unless isRoot
-
-    last = SCALAR
-    numDescents = 0
-    lastKey = 0
-
-    for d in descent
-      assert d?
-
-      last = if Array.isArray(d)
-        key = checkDescent d, no
-        if numDescents
-          t1 = typeof lastKey
-          t2 = typeof key
-          if t1 == t2
-            assert lastKey < key
-          else
-            assert t1 is 'number' and t2 is 'string'
-
-        lastKey = key
-        numDescents++
-        DESCENT
-      else if typeof d is 'object'
-        assert last == SCALAR
-        checkComponent d
-        EDIT
-      else
-        assert last != DESCENT
-        checkScalar d
-        SCALAR
-
-    assert numDescents != 1
-    assert last in [EDIT, DESCENT]
-
-    return descent[0]
-
-
-  checkDescent op, true
-
-  assert.equal numPickSlots, numDropSlots
-  for i in [0...numPickSlots]
-    assert pickedSlots[i]
-    assert droppedSlots[i]
-
-  #console.log numPickSlots, numDropSlots, pickedSlots, droppedSlots
-
-  #console.log '---> ok', op
-
-# ******* apply
-
-type.apply = (snapshot, op) ->
-  # snapshot is a regular JSON object. It gets consumed in the process of
-  # making the new object. (So we don't need to clone). I'm not 100% sure this
-  # is the right choice... immutable stuff is super nice.
-  #
-  # ????
-  log.quiet = true
-  log '*******************************************'
-  # snapshot = clone snapshot
-  # op = clone op
-  log 'apply', snapshot, op, typeof snapshot
-  # console.error snapshot, op
-  checkOp op
-
-  # Technically the snapshot should *never* be undefined, but I'll quietly
-  # convert it to null if it is.
-  snapshot = null if snapshot is undefined
-
-  return snapshot if op is null
-
-  held = []
-
-  # Phase 1: Pick
-  pick = (subDoc, descent, isRoot) ->
-    log 'pick', subDoc, descent, isRoot
-    if isRoot
-      rootContainer = container = [subDoc]
-      key = 0
-      i = 0
-    else
-      container = subDoc
-      key = descent[0]
-      subDoc = subDoc?[key]
-      i = 1
-
-    while i < descent.length and !Array.isArray descent[i]
-      d = descent[i]
-      # console.log 'd', d, i, subDoc, container, key
-      if typeof d is 'object'
-        if hasPick d
-          assert subDoc != undefined
-          held[d.p] = subDoc if d.p?
-          removeChild container, key
-          container = null
-      else
-        container = subDoc
-        key = d
-        subDoc = subDoc?[d]
-
-      i++
-
-    # Children. These need to be traversed in reverse order here.
-    j = descent.length - 1
-    while j >= i
-      pick subDoc, descent[j], false
-      j--
-
-    if isRoot
-      snapshot = rootContainer[0] ? null
-
-  pick snapshot, op, true
-
-  log '---- after pick phase ----'
-  log held, snapshot
-
-  # Phase 2: Drop
-  drop = (subDoc, descent, isRoot) ->
-    # log 'drop', subDoc, descent, isRoot
-
-    if isRoot
-      rootContainer = container = {s:snapshot}
-      key = 's'
-      i = 0
-    else
-      container = subDoc
-      key = descent[0]
-      subDoc = subDoc?[key]
-      i = 1
-
-    while i < descent.length
-      d = descent[i]
-      # console.log 'd', d, i, subDoc, container, key
-
-      if Array.isArray d
-        drop subDoc, d, false
-      else if typeof d is 'object'
-        if d.d?
-          subDoc = insertChild container, key, held[d.d]
-        else if d.i != undefined
-          if typeof key is 'string' and container[key]?
-            throw Error 'Cannot insert into non-empty child'
-          subDoc = insertChild container, key, clone d.i
-
-        if (t = getType d)
-          replacement = t.apply subDoc, getEdit d
-          # We don't use insertChild here because its a replacement.
-          container[key] = replacement
-        else if d.e != undefined
-          throw Error "Subtype #{d.et} undefined"
-      else
-        container = subDoc
-        key = d
-        subDoc = subDoc?[d]
-
-      i++
-
-    if isRoot
-      snapshot = rootContainer.s
-
-  drop snapshot, op, true
-
-  return snapshot
 
 # ****** Compose
-
-compliment = (x) -> -x - 2
 
 type._compose = (op1, op2) ->
   checkOp op1
@@ -397,7 +163,7 @@ type._compose = (op1, op2) ->
       _obj = scanBoundaryLiteral obj[key], p2
 
       if _obj is undefined
-        removeChild obj, key
+        obj = removeChild obj, key
         offset++ if typeof key is 'number'
 
     if (c = p2.getComponent())

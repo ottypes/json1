@@ -12,9 +12,10 @@
 
 
 assert = require 'assert'
-type = require './json1'
+{type} = require './index'
 
 {transform} = type
+deepClone = require './lib/deepClone'
 
 # Transform tests
 
@@ -23,8 +24,10 @@ printRepro = (op1, op2, direction, expect) ->
   console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
 
 apply = ({doc:snapshot, op, expect}) ->
-  snapshot = type.apply snapshot, op
-  assert.deepEqual snapshot, expect
+  orig = deepClone snapshot
+  result = type.apply snapshot, op
+  assert.deepEqual snapshot, orig, 'Original snapshot was mutated'
+  assert.deepEqual result, expect
 
 xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
   if expect != undefined then expectLeft = expectRight = expect

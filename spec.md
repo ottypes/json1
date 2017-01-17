@@ -78,10 +78,10 @@ Translation: Descend into `x`. Pick up the value and put it in slot 0. Descend i
 An operation is a tree. Each node in the tree mirrors a location in the document itself when the operation is being applied. At the root of the tree (and each second level) the tree can have the following keys:
 
 - **p** (pickup): During the pickup phase, pick up the subtree from this position and put it in the specified slot. Eg `p:10`.
-- **r** (remove): During the pickup phase, remove the subtree at the current position.
+- **r** (remove): During the pickup phase, remove the subtree at the current position. The value is ignored, but you can store the removed value if you want the op to be invertible.
 - **d** (drop): During the drop phase, insert the subtree in the specified slot here. Eg `d:10`.
-- **i** (insert): During the drop phase, insert the immediate value here. Eg `di:"cabbage"`
-- **e** (edit): Apply the specified edit to the subdocument that is here. Eg `e:{type:…, op:…}`
+- **i** (insert): During the drop phase, insert the immediate value here. Eg `i:"cabbage"`
+- **e** (edit): Apply the specified edit to the subdocument that is here. Eg `e:{type:…, op:…}`. Text edits are specialcased to allow you to simply write `es:[...op]` to use the [ot-text type](https://github.com/ottypes/text).
 
 Most nodes simply contain descents into their children, so the tree ends up being this sort of alternating 2 level affair. For example, to pick up `x.y.z` an operation would have `{o:{x:{o:{y:{o:{z:{p:0}}}}}}}`. It feels pretty silly, and I'm sure there's a cleaner answer. I'm doing it this way because its important to know whether we're descending into a list or an object during transform. (And we might descend into both during different phases of the operation if an object is replaced with a list). I'd love some suggestions on better ways to express this.
 
