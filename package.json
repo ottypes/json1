@@ -12,7 +12,7 @@
     "ot-fuzzer": "^1.0.0"
   },
   "scripts": {
-    "test": "mocha --compilers coffee:coffee-script/register --reporter spec test.coffee"
+    "test": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks test.coffee"
   },
   "repository": {
     "type": "git",

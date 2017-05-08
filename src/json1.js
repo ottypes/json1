@@ -347,7 +347,8 @@ type.apply = function(snapshot, op) {
           mut(); subDoc = insertChildMut(container, key, d.i)
         }
 
-        if ((t = getType(d))) { // Edit. Ok because its illegal to drop inside mixed region
+        const t = getType(d)
+        if (t) { // Edit. Ok because its illegal to drop inside mixed region
           mut(); subDoc = container[key] = t.apply(subDoc, getEdit(d));
         } else if (d.e !== undefined) {
           throw Error("Subtype " + d.et + " undefined");
