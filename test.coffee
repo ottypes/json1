@@ -392,6 +392,11 @@ describe 'json1', ->
       expectLeft: [1, p:0, 'y', d:0]
       expectRight: null
 
+    it 'remove the same item in a list', -> xf
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { r: true } ]
+      expect: null
+
 # ******* Compose *******
 
   describe.skip 'compose', ->
