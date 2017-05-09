@@ -24,20 +24,24 @@ printRepro = (op1, op2, direction, expect) ->
   console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
 
 apply = ({doc:snapshot, op, expect}) ->
+  type.debug = false
+
   orig = deepClone snapshot
   result = type.apply snapshot, op
-  assert.deepEqual snapshot, orig, 'Original snapshot was mutated'
-  assert.deepEqual result, expect
+  assert.deepStrictEqual snapshot, orig, 'Original snapshot was mutated'
+  assert.deepStrictEqual result, expect
 
-xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
+xf = ({op1, op2, expect, expectLeft, expectRight, debug, lnf}) ->
   if expect != undefined then expectLeft = expectRight = expect
 
   type.debug = !!debug
 
+  opts = {lnf}
+
   try
     #printRepro op1, op2, 'left', expectLeft
-    left = transform op1, op2, 'left'
-    assert.deepEqual left, expectLeft
+    left = transform op1, op2, 'left', opts
+    assert.deepStrictEqual left, expectLeft
   catch e
     type.debug = true
     printRepro op1, op2, 'left', expectLeft
@@ -46,12 +50,37 @@ xf = ({op1, op2, expect, expectLeft, expectRight, debug}) ->
 
   try
     #printRepro op1, op2, 'right', expectRight
-    right = transform op1, op2, 'right'
-    assert.deepEqual right, expectRight
+    right = transform op1, op2, 'right', opts
+    assert.deepStrictEqual right, expectRight
   catch e
     type.debug = true
     printRepro op1, op2, 'right', expectRight
     transform op1, op2, 'right'
+    throw e
+
+diamond = ({doc, op1, op2}) ->
+  type.debug = false
+
+  # Test that the diamond property holds
+  op1_ = transform op1, op2, 'left'
+  op2_ = transform op2, op1, 'right'
+
+  doc1 = type.apply doc, op1
+  doc2 = type.apply doc, op2
+
+  doc12 = type.apply doc1, op2_
+  doc21 = type.apply doc2, op1_
+
+  try
+    assert.deepStrictEqual doc12, doc21
+  catch e
+    type.debug = true
+    console.error '\nOops! Diamond property does not hold'
+    console.error 'op1', op1, 'op2_', op2_
+    console.error '->', doc12
+    console.error 'vs'
+    console.error 'op2', op2, 'op1_', op1_
+    console.error '->', doc21
     throw e
 
 
@@ -216,7 +245,12 @@ describe 'json1', ->
     it 'can edit the root', ->
       apply
         doc: {x:5}
-        op: [r:{}]
+        op: [r:true]
+        expect: null
+
+      apply
+        doc: ''
+        op: [r:true]
         expect: null
 
       apply
@@ -288,6 +322,19 @@ describe 'json1', ->
       op: [es:[]]
       expect: ''
 
+    it 'diamond', ->
+      # TODO: Do this for all combinations.
+      diamond
+        doc: Array.from 'abcde'
+        op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
+        op2: [ [ 0, { p: 0 } ], [ 4, { d: 0 } ] ]
+
+    it 'shuffles lists correctly', -> xf
+      op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 10, { d: 0 } ] ]
+      expectLeft: [ [ 1, { d: 0 } ], [ 10, { p: 0 } ] ]
+      expectRight: null
+
     it 'inserts before edits', ->
       xf
         op1: [0, 'x', i:5]
@@ -350,7 +397,7 @@ describe 'json1', ->
   describe.skip 'compose', ->
     compose = ({op1, op2, expect}) ->
       result = type.compose op1, op2
-      assert.deepEqual result, expect
+      assert.deepStrictEqual result, expect
 
     it 'composes empty ops to nothing', -> compose
       op1: null
@@ -405,7 +452,7 @@ describe 'json1', ->
   describe.skip 'old compose', ->
     compose = ({op1, op2, expect}) ->
       result = type.compose op1, op2
-      assert.deepEqual result, expect
+      assert.deepStrictEqual result, expect
 
     it 'composes null and another op to that other op', ->
       t = (op) ->
@@ -772,6 +819,19 @@ describe 'json1', ->
         it 'transforms by p2 picks'
         it 'transforms by p2 drops'
 
+    describe 'complex regressions', ->
+      it.skip 'acts correctly when ops are mutually blackholed', ->
+        xf
+          op1: [['x', p:0], ['y', 'a', d:0]]
+          op2: [['x','a', d:0], ['y', p:0]]
+          expect: ['x', r:true]
+
+        xf
+          op1: [['x', p:0], ['y', 'a', d:0]]
+          op2: [['x','a', d:0], ['y', p:0]]
+          lnf: ['lnf']
+          expect: [['lnf', [0, d:0], [1, d:1]], ['x', p:0], ['y', p:1]]
+
   describe 'transform-old', ->
     it 'foo', ->
       xf
@@ -802,11 +862,18 @@ describe 'json1', ->
     describe 'deletes', ->
 
       it.skip 'delete parent of a move', -> xf
-        # The current logic of transform actually just burns everything (in a consistant way of course). I'm not sure if this is better or worse - basically we'd be saying that if a move could end up in one of two places, put it in the place where it won't be killed forever. But that introduces new complexity, so I'm going to skip this for now.
-        # x.a -> a, delete x;
-        op1: [['a', d:0], ['x', r:true, 'a', p:0]]
+        # The current logic of transform actually just burns everything (in a
+        # consistant way of course). I'm not sure if this is better or worse -
+        # basically we'd be saying that if a move could end up in one of two places,
+        # put it in the place where it won't be killed forever. But that introduces new
+        # complexity, so I'm going to skip this for now.
+
+        # x.a -> a, delete x
+        op1: [['x', r:true, 'a', p:0], ['z', d:0]]
+        # x.a -> x.b.
         op2: ['x', ['a', p:0], ['b', d:0]]
-        expect: [['a', d:0], ['x', r:true, 'b', p:0]]
+        expect: [['x', r:true, 'b', p:0], ['z', d:0]] # TODO: It would be better to do this in both cases.
+        #expectRight: ['x', r:true]
 
       it 'awful delete nonsense', ->
         xf
@@ -958,9 +1025,20 @@ describe 'json1', ->
         expect: ['y', 3, i:5]
 
       it 'vs cancelled op1 pick', -> xf
-        op1: [[3, p:0], [5, r:true, i:4], [10, d:0]]
-        op2: [3, r:true]
-        expect: [4, r:true, i:4]
+        doc: Array.from 'abcdefg'
+        op1: [[1, p:0], [4, r:true, i:4], [6, d:0]]
+        op2: [1, r:true]
+        expect: [[3, r:true], [4, i:4]]
+
+      it 'xxxxx 1', -> diamond # TODO Regression.
+        doc: Array.from('abcdef')
+        op1: [[1, {p:0, i:'AAA'}], [3, {i:'BBB'}], [5, {d:0}]]
+        op2: [1, {r:true}]
+
+      it 'xxxxx 2', -> diamond
+        doc: Array.from('abcdef')
+        op1: [[1, {p:0, i:'AAA'}], [3, {d:0}], [5, {i:'CCC'}]]
+        op2: [1, {r:true}]
 
     describe 'edit', ->
       it 'transforms edits by one another', -> xf
@@ -991,4 +1069,5 @@ describe 'json1', ->
 
   describe 'fuzzer', -> it.skip 'runs my sweet!', ->
     fuzzer = require 'ot-fuzzer'
-    fuzzer type, require './genOp'
+    tracer = require('./tracer')(type, require './genOp')
+    fuzzer tracer, tracer.genOp

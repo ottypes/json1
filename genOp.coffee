@@ -2,10 +2,10 @@
 # require 'ot-fuzzer'
 
 assert = require 'assert'
-{writeCursor} = require './cursor'
-log = require './log'
+{writeCursor} = require './lib/cursor'
+log = require './lib/log'
 log.quiet = false
-type = require './json1'
+type = require './lib/json1'
 
 
 # This is an awful function to clone a document snapshot for use by the random
@@ -143,7 +143,7 @@ module.exports = genRandomOp = (data) ->
       walk = randomWalkDrop w, container
       if walk != null
         [path, parent, key] = walk
-        log 'walk', walk
+        #log 'walk', walk
         val = randomThing()
         w.descend key if parent != container
         w.write 'i', val
@@ -171,7 +171,7 @@ module.exports = genRandomOp = (data) ->
   doc = container.data
   op = w.get()
 
-  log '->', op, doc
+  log '-> generated', op, doc
 
   type.checkValidOp op
 
