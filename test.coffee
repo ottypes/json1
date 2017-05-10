@@ -386,7 +386,7 @@ describe 'json1', ->
       expectLeft: [0, p:0,d:0]
       expectRight: [[0, p:0], [1, d:0]]
 
-    it.skip 'pick same item vs shuffle list', -> xf
+    it 'pick same item vs shuffle list', -> xf
       op1: [1, ['x', p:0], ['y', d:0]]
       op2: [1, {d:0}, 'x', {p:0}]
       expectLeft: [1, p:0, 'y', d:0]
@@ -396,6 +396,17 @@ describe 'json1', ->
       op1: [ 0, { r: true } ]
       op2: [ 0, { r: true } ]
       expect: null
+
+    it 'rm vs hold item', -> xf
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { p: 0, d: 0 } ]
+      expect: [ 0, { r: true } ]
+
+    it 'moves child elements correctly', -> xf
+      doc: ['a', [0,10,20], 'c']
+      op1: [ 1, 0, { p: 0, d: 0 } ]
+      op2: [ [ 1, { d: 0 } ], [ 2, { p: 0 } ] ]
+      expect: [ 2, 0, { d:0, p:0 } ]
 
 # ******* Compose *******
 
@@ -1020,6 +1031,7 @@ describe 'json1', ->
           expect: [[0, i:'a'], [2, i:'b']]
 
       it 'vs cancelled op2 drop', -> xf
+        doc: {x:{a:'x.a'}, y:['a','b','c']}
         op1: [['x', r:true], ['y', 3, i:5]]
         op2: [['x', 'a', p:0], ['y', 2, d:0]]
         expect: [['x', r:true], ['y', [2, r:true], [3, i:5]]]
@@ -1072,7 +1084,5 @@ describe 'json1', ->
         op2: [1, r:"yo"]
         expect: null
 
-  describe 'fuzzer', -> it.skip 'runs my sweet!', ->
-    fuzzer = require 'ot-fuzzer'
-    tracer = require('./tracer')(type, require './genOp')
-    fuzzer tracer, tracer.genOp
+      # TODO Numbers
+

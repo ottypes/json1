@@ -12,7 +12,8 @@
     "ot-fuzzer": "^1.0.0"
   },
   "scripts": {
-    "test": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks test.coffee"
+    "test": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks test.coffee",
+    "fuzzer": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks fuzzer.coffee"
   },
   "repository": {
     "type": "git",
