@@ -408,6 +408,12 @@ describe 'json1', ->
       op2: [ [ 1, { d: 0 } ], [ 2, { p: 0 } ] ]
       expect: [ 2, 0, { d:0, p:0 } ]
 
+    it 'moves list indexes', -> xf
+      doc: [[], 'b', 'c']
+      op1: [ [ 0, 'hi', { d: 0 } ], [ 1, { p: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 20, { d: 0 } ] ]
+      expect: [[0, p:0], [19, 'hi', d:0]]
+
 # ******* Compose *******
 
   describe.skip 'compose', ->
