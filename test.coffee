@@ -820,14 +820,37 @@ describe 'json1', ->
 
     describe 'op2 cancel move', ->
       it 'and insert', -> xf
-        op2: [['x', 'a', p:0], ['y', d:0, 'b', i:5]]
         op1: ['x', r:true]
+        op2: [['x', 'a', p:0], ['y', d:0, 'b', i:5]]
         expect: [['x', r:true], ['y', r:true]]
 
       it 'and another move', -> xf
         op2: [['q', p:1], ['x', 'a', p:0], ['y', d:0, 'b', d:1]]
         op1: ['x', r:true]
         expect: [['x', r:true], ['y', r:true]]
+
+    describe 'op2 list move an op1 drop', ->
+      it 'vs op1 remove', -> xf
+        op1: [[0, r:true, 'a', i:'hi'], [5, r:true]]
+        op2: [[1, p:0], [4, d:0]]
+        expect: [[0, r:true], [3, 'a', i:'hi'], [5, r:true]]
+
+      it 'vs op1 remove 2', -> xf
+        op1: [[0, r:true, 'a', i:'hi'], [1, r:true], [2, r:true]]
+        op2: [[3, p:0], [4, d:0]]
+        expect: [[0, r:true], [1, r:true, 'a', i:'hi'], [2, r:true]]
+
+      it 'vs op1 insert before', -> xf
+        op1: [[0, i:'a'], [1, i:'b'], [2, 'a', i:'hi']]
+        op2: [[0, p:0], [1, d:0]]
+        expect: [[0, i:'a'], [1, i:'b'], [3, 'a', i:'hi']]
+
+
+      it 'vs op1 insert before and replace', -> xf
+        op1: [[0, i:'xx', 'a', r:true], [1, 'a', i:'hi']]
+        op2: [[0, p:0], [3, d:0]]
+        expect: [[0, i:'xx'], [3, 'a', r:true], [4, 'a', i:'hi']]
+        
 
     describe 'list', ->
       describe 'drop', ->
@@ -1062,6 +1085,7 @@ describe 'json1', ->
         doc: Array.from('abcdef')
         op1: [[1, {p:0, i:'AAA'}], [3, {d:0}], [5, {i:'CCC'}]]
         op2: [1, {r:true}]
+
 
     describe 'edit', ->
       it 'transforms edits by one another', -> xf
