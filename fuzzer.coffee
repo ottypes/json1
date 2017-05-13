@@ -3,7 +3,9 @@
 assert = require 'assert'
 {type} = require './index'
 
-describe 'fuzzer', -> it 'runs my sweet!', ->
+module.exports = run = ->
   fuzzer = require 'ot-fuzzer'
   tracer = require('./tracer')(type, require './genOp')
   fuzzer tracer, tracer.genOp
+
+run() if require.main == module
