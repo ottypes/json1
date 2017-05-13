@@ -8,8 +8,9 @@ const log = require('./lib/log')
 const deps = new Map // map from artifact to [...deps]
 const meta = new Map // artifact to user information
 
-const printInfo = (item, prefix = '', depth = 3) => {
+const printInfo = (item, prefix = '', depth = 5) => {
   const m = meta.get(item)
+  if (m == null) return log(prefix + 'NO DATA', item)
   log(prefix + m.fn + ' ->', item, m)
 
   if (depth > 0) {
@@ -27,8 +28,10 @@ module.exports = (type, genOp) => ({
   apply(snapshot, op) {
     try {
       const result = type.apply(snapshot, op)
-      deps.set(result, [snapshot, op])
-      meta.set(result, {fn:'apply'})
+      if (result !== snapshot) {
+        deps.set(result, [snapshot, op])
+        meta.set(result, {fn:'apply'})
+      }
 
       return result
     } catch (e) {
@@ -44,8 +47,11 @@ module.exports = (type, genOp) => ({
   transform(op1, op2, side) {
     try {
       const result = type.transform(op1, op2, side)
-      deps.set(result, [op1, op2])
-      meta.set(result, {fn:'transform', side})
+      if (result !== op1) {
+        deps.set(result, [op1, op2])
+        meta.set(result, {fn:'transform', side})
+      }
+
       return result
     } catch (e) {
       console.error('************************************* TRANSFORM FAILED!')

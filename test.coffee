@@ -246,16 +246,27 @@ describe 'json1', ->
       apply
         doc: {x:5}
         op: [r:true]
-        expect: null
+        expect: undefined
 
       apply
         doc: ''
         op: [r:true]
-        expect: null
+        expect: undefined
 
       apply
-        doc: null
-        op: [{i:5}]
+        doc: 'hi'
+        op: [r:true, i:null]
+        expect: null
+
+      assert.throws ->
+        apply
+          doc: null
+          op: [{i:5}]
+          expect: 5
+
+      apply
+        doc: undefined
+        op: [i:5]
         expect: 5
 
       apply
@@ -413,6 +424,13 @@ describe 'json1', ->
       op1: [ [ 0, 'hi', { d: 0 } ], [ 1, { p: 0 } ] ]
       op2: [ [ 0, { p: 0 } ], [ 20, { d: 0 } ] ]
       expect: [[0, p:0], [19, 'hi', d:0]]
+
+    it 'insert empty string vs insert null', -> xf
+      doc: undefined
+      op1: [i:'hi']
+      op2: [i:null]
+      expectLeft: [r:true, i:'hi']
+      expectRight: null
 
 # ******* Compose *******
 
