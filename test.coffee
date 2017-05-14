@@ -458,6 +458,11 @@ describe 'json1', ->
       expectLeft: [[0, p:0, 'x', d:0], [1, 'x', r:true]]
       expectRight: [0, r:true]
 
+    it 'transform crash', -> xf
+      op1: [ [ 'the', { r: true, d: 0 } ], [ 'whiffling', { p: 0 } ] ]
+      op2: [ 'the', { p: 0, d: 0 } ]
+      expect: [ [ 'the', { d: 0, r: true } ], [ 'whiffling', { p: 0 } ] ]
+
 # ******* Compose *******
 
   describe.skip 'compose', ->
@@ -920,16 +925,32 @@ describe 'json1', ->
         it 'transforms by p2 picks'
         it 'transforms by p2 drops'
 
-    describe 'complex regressions', ->
-      it.skip 'acts correctly when ops are mutually blackholed', ->
-        xf
-          op1: [['x', p:0], ['y', 'a', d:0]]
-          op2: [['x','a', d:0], ['y', p:0]]
-          expect: ['x', r:true]
+    describe 'blackhole', ->
+      it 'works with objects blackholed', -> xf
+        op1: [['x', p:0], ['y', 'a', d:0]]
+        op2: [['x', 'a', d:0], ['y', p:0]]
+        expect: ['x', r:true]
 
+      it 'blackhole logic does not apply when op2 removes parent', -> xf
+        # TODO: Although you wouldn't know it, since this result is very similar.
+        op1: [['x', p:0], ['y', 'xx', 'a', d:0]]
+        op2: [['x', 'a', d:0], ['y', p:0, 'xx', r:true]]
+        expect: ['x', r:true]
+
+      it 'blackhole logic still applies when op2 inserts', -> xf
+        op1: [['x', p:0], ['y', 'a', i:{}, 'b', d:0]]
+        op2: [['x', 'a', i:{}, 'b', d:0], ['y', p:0]]
+        expect: ['x', r:true]
+
+      it 'blackholes items in lists correctly', -> xf
+        op1: [1, p:0, 'a', d:0]
+        op2: [[1, 'b', d:0], [2, p:0]]
+        expect: [1, r:true]
+
+      it.skip 'moves blackholed items into lnf', ->
         xf
           op1: [['x', p:0], ['y', 'a', d:0]]
-          op2: [['x','a', d:0], ['y', p:0]]
+          op2: [['x', 'a', d:0], ['y', p:0]]
           lnf: ['lnf']
           expect: [['lnf', [0, d:0], [1, d:1]], ['x', p:0], ['y', p:1]]
 

@@ -111,37 +111,10 @@ function debugxf(orig, ops1, ops2) {
 }
 
 /*
-debugxf(
-  {"snicker":[[[[]],[[["He",""],"frabjous"]]],null,null]},
-  [["snicker",0,1,0,1,{"r":true}],["snicker",1,{"r":true}],["snicker",0,1,0,{"d":0},0,0,{"p":0}]],
-  [["snicker",1,{"r":true}],["snicker",0,1,0,{"r":true}],["snicker",0,0,0,{"p":0,"d":0}],["snicker",0,{"d":0},0,0,{"p":0}],[["and",{"d":0}],["snicker",{"p":0}]]])
-*/
-
-debugxf([[0,[{"tree":""}]]],
-  [[0,0,{"i":"as"}],[0,{"p":0,"d":0}],[0,[0,{"p":0}],[1,{"d":0}]],[0,1,{"p":0},0,"thought",{"d":0}],[0,0,{"r":true}]],
-  [[0,0,{"p":0},0,"thought",{"d":0}],[0,{"p":0,"d":0}]]
-)
-
-
-/*
-debugxf("hi there", [
-  [{es:['simon says ']}]
-], [
-  [{es:[2, ' over']}]
-])*/
-
-/*
 debugxf(['a', 'b'],
   [[[ 0, { p: 0 } ], [ 1, { d: 0 } ]]],
   [[1, { p: 0, d: 0 }]])
 */
 
-/*
-debugxf([ { Twas: [ '', 'toves' ], mimsy: 0 } ],
-  [ [ 0, 'Twas', [ 0, { p: 0 } ], [ 1, { d: 0 } ] ],
-    [ 0, [ 'Twas', 2, { d: 0 } ], [ 'mimsy', { p: 0 } ] ],
-    [ 0, 'Twas', [ 1, { p: 0 } ], [ 2, { d: 0 } ] ] ],
-  [ [ 0, { i: 'the' } ],
-    [ 0, { p: 0 }, 'and', { d: 0 } ],
-    [ 0, 'Twas', 1, { p: 0, d: 0 } ],
-    [ 0, { p: 0, d: 0 } ] ])*/
+debugxf({"stood":0,"mome":"bite","back":"gimble"}, [[["mome",{"p":0}],["the",{"d":0}]],["hand",{"i":""}],[["the",{"p":0}],["were",{"d":0}]],["hand",{"r":true}]], [["the",{"i":""}],[["mome",{"p":0}],["whiffling",{"d":0}]],["sword",{"i":null}],["the",{"p":0,"d":0}]])
+
