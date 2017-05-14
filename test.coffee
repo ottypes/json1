@@ -1,15 +1,9 @@
-# The Nate format:
+# Unit tests for the JSON1 OT type.
 #
+# These tests are quite unstructured. You can see the skeletons of a few
+# organizing systems, but ultimately there's just lots of test cases to run.
 #
-# Each descent looks like this:
-# - Optional {} first element containing the edits at this leaf.
-# - Next, optional list of scalars describing a descent
-# - Finally either an edit {} or a list of descent.
-#
-# This is more complicated than the current system. It works like this:
-# - The operation is a list.
-# -
-
+# Cleanups welcome, so long as you don't remove any tests.
 
 assert = require 'assert'
 {type} = require './index'
@@ -829,6 +823,7 @@ describe 'json1', ->
         op2: ['z', i:5]
         expect: null
 
+      # This is the new setNull for setting up schemas
       it 'vs embedded inserts', ->
         xf
           op1: ['x', i:{}]
@@ -850,6 +845,12 @@ describe 'json1', ->
           op2: ['x', i:{}, 'y', i:6]
           expectLeft: ['x', 'y', r:true, i:5]
           expectRight: null
+
+      it 'with embedded edits', -> xf
+        op1: [i:'', es:['aaa']]
+        op2: [i:'', es:['bbb']]
+        expectLeft: [es:['aaa']]
+        expectRight: [es:[3, 'aaa']]
 
     describe 'op1 edit', ->
       it 'vs delete', -> xf

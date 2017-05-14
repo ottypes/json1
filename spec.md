@@ -1,12 +1,19 @@
 # JSON1 OT Spec
 
-> This is a draft document. Anything here could still change.
+The JSON OT type is designed to allow concurrent edits in an arbitrary JSON document.
 
-The JSON OT type is designed to allow arbitrary concurrent edits in a JSON document. The document must be a tree - each object can appear only once in the tree. If you serialize the document to JSON and back, it should be identical.
+The JSON1 OT type will replace the JSON0 OT type. Once this type is working, I recommend everyone uses it instead of JSON0. We'll write functions to automatically convert JSON0 ops to JSON1 ops. JSON1 is simpler, faster and more capable in every way compared to JSON0.
 
-The JSON1 OT type will replace the JSON0 OT type. Once this type is working, JSON0 will be deprecated. We'll write functions to automatically convert JSON0 ops to JSON1 ops.
+Like its predecessor, JSON1 requires that the document is a valid JSON structure. That is:
 
-Unlike the [big table of operations](https://github.com/ottypes/json0/blob/master/README.md#summary-of-operations) in JSON0, the new OT type will only support essential three operation components:
+- Each object can appear only once in the tree
+- Cycles are not allowed
+- The value `undefined` is not allowed anywhere but the root.
+- If you serialize the document to JSON and back, you should get back an identical document.
+
+The root of the document can be any valid JSON value (including a string, a number, `true`, `false` or `null`). The document can also be `undefined`. This allows the JSON operations to describe insertions and deletions of the entire document.
+
+Replacing the [big table of operations in JSON0](https://github.com/ottypes/json0/blob/master/README.md#summary-of-operations), JSON1 only supports three essential operation components:
 
 - Pick up subtree / remove subtree
 - Place subtree / insert subtree
@@ -14,9 +21,11 @@ Unlike the [big table of operations](https://github.com/ottypes/json0/blob/maste
 
 When you pick up a subtree, it can be placed somewhere else or it could be discarded. When you place a subtree, it can come from somewhere else in the document or it could be an immediate literal value.
 
-The type is designed to contain other embedded OT documents (rich text documents or whatever). The subdocuments can be inserted, deleted or moved around the tree directly by the JSON type. However, if you want to edit subdocuments themselves, you should use the document's own native operations, embedded inside a JSON1 operation. The syntax for this hasn't been defined yet, but it'll probably be pretty simple.
+The type is also designed to contain other embedded OT documents (rich text documents or whatever). The subdocuments can be inserted, deleted or moved around the tree directly by the JSON type. However, if you want to edit subdocuments themselves, you should use the document's own native operations. These operations can be embedded inside a JSON1 operation.
 
-> Note: Currently the plan is to use embedded types to edit raw strings, numbers and booleans too. I'll probably make & bundle a simple, officially blessed subtype for each, as well as add some syntax sugar for it.
+For plain text edits the [text OT type](https://github.com/ottypes/text) is bundled & always available.
+
+> Note: Currently the plan is to use embedded types to edit raw numbers and booleans too. I'll probably make & bundle a simple, officially blessed subtype for each, as well as add some syntax sugar for it.
 
 
 ## Why? Advantages compared to JSON0
@@ -26,11 +35,11 @@ The JSON0 OT type has some weaknesses:
 - You can't move an object key or move an item between two different lists
 - The semantics for reordering list items is really confusing - and its slightly different depending on whether you're inserting or moving
 - JSON0 is O(N*M) if you transform an operation with M components by an operation with N components.
-- (Not discussed yet) I want an insert-null operation.
+- JSON0 has no way to safely initialize data before editing
 - Doing multiple inserts or multiple removes in a list is quite common, and its quite awkward in JSON0. (You need an operation component for each insert and each remove).
-- The new type should support conversion between JSON operations and [JSON Patch (RFC 6902)](https://tools.ietf.org/html/rfc6902). I want those conversions to be bidirectional if possible, although converting embedded custom OT types to JSON Patch probably won't work.
+- The new type should support conversion between JSON operations and [JSON Patch (RFC 6902)](https://tools.ietf.org/html/rfc6902). I want those conversions to be bidirectional if possible, although converting embedded custom OT types to JSON Patch won't work.
 
-tldr; After a lot of thinking I think we can have a replacement type which is simpler and easier to maintain, faster, more feature rich and more widely useful.
+*tldr;* After a lot of thinking I think we can have a replacement type which is simpler and easier to maintain, faster, more feature rich and more widely useful.
 
 
 ## Operations
@@ -84,6 +93,39 @@ An operation is a tree. Each node in the tree mirrors a location in the document
 - **e** (edit): Apply the specified edit to the subdocument that is here. Eg `e:{type:…, op:…}`. Text edits are specialcased to allow you to simply write `es:[...op]` to use the [ot-text type](https://github.com/ottypes/text).
 
 Most nodes simply contain descents into their children, so the tree ends up being this sort of alternating 2 level affair. For example, to pick up `x.y.z` an operation would have `{o:{x:{o:{y:{o:{z:{p:0}}}}}}}`. It feels pretty silly, and I'm sure there's a cleaner answer. I'm doing it this way because its important to know whether we're descending into a list or an object during transform. (And we might descend into both during different phases of the operation if an object is replaced with a list). I'd love some suggestions on better ways to express this.
+
+## Initializing data ('set null')
+
+Its quite common to want to initialize data on first use. This can cause problems - what happens if another user tries to initialize the data at the same time?
+
+If the two clients try to insert `{tags:['rock']}` and `{tags:['roll']}`, one client's insert will win and the other client's edit would be lost. The document will either contain 'rock' or 'roll', but not both.
+
+In JSON0 there is no solution to this problem. In JSON1 the semantics of `insert` are specially chosen to allow this.
+
+The rules are:
+
+- If two identical inserts happen, they 'both win', and both inserts are kept in the final document.
+- Inserts, drops and edits can be embedded inside another insert.
+
+Together, these rules allow clients to concurrently initialize a document without bumping heads. Eg if these two operations are run concurrently:
+
+    [{i:{tags:[]}}, 'tags', 0, {i:'rock'}]
+
+and
+
+    [{i:{tags:[]}}, 'tags', 0, {i:'roll'}]
+
+then the document will end up with the contents `{tags:['rock', 'roll']}`.
+
+This also works with editing:
+
+    [{i:'', es:["aaa"]}]
+
+and
+
+    [{i:'', es:["bbb"]}]
+
+Will result in the document containing either "aaabbb" or "bbbaaa".
 
 
 ## A note on order
@@ -143,8 +185,3 @@ Rewrite the document {x:{y:{secret:"data"}}} as {y:{x:{secret:"data"}}}:
 ```
 
 (Translation: Go into x.y and pick up the data (slot 0). Set doc.y = {}. Set doc.y.x = data (slot 0).)
-
-
-# Status
-
-I've got the individual map and list transform functions working, but I haven't combined them together. And I also haven't tested it.
