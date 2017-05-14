@@ -13,6 +13,7 @@
 
 assert = require 'assert'
 {type} = require './index'
+log = require './lib/log'
 
 {transform} = type
 deepClone = require './lib/deepClone'
@@ -74,13 +75,17 @@ diamond = ({doc, op1, op2}) ->
   try
     assert.deepStrictEqual doc12, doc21
   catch e
-    type.debug = true
-    console.error '\nOops! Diamond property does not hold'
-    console.error 'op1', op1, 'op2_', op2_
-    console.error '->', doc12
-    console.error 'vs'
-    console.error 'op2', op2, 'op1_', op1_
-    console.error '->', doc21
+    log.quiet = false
+    log '\nOops! Diamond property does not hold. Given document', doc
+    log 'op1', op1, 'op2_', op2_
+    log '---- 1'
+    log 'op1', op1, '->', doc1
+    log 'op2', op2, '->', doc12
+    log '---- 2'
+    log 'op2', op2, '->', doc2
+    log 'op1', op1, '->', doc21
+    log '----------'
+    log doc12, '!=', doc21
     throw e
 
 
@@ -317,7 +322,7 @@ describe 'json1', ->
       op: [['x', p:0], ['y', d:0, es:['sup']]]
       expect: {y: "supyooo"}
 
-  describe 'regressions', ->
+  describe 'fuzzer tests', ->
     it 'asdf', -> apply
       doc: { the: '', Twas: 'the' }
       op: [ 'the', { es: [] } ]
@@ -431,6 +436,19 @@ describe 'json1', ->
       op2: [i:null]
       expectLeft: [r:true, i:'hi']
       expectRight: null
+
+    it 'move vs emplace', -> xf
+      doc: ['a', 'b']
+      op1: [[0, p:0], [1, d:0]]
+      op2: [1, {p:0, d:0}]
+      expectLeft: [0, {p:0, d:0}]
+      expectRight: [[0, p:0], [1, d:0]]
+
+    it 'rm chases a subdocument that was moved out', -> xf
+      doc: [ [ 'aaa' ] ]
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { d: 0 }, 0, { p: 0 } ] # Valid because lists.
+      expect: [[0, r:true], [1, r:true]]
 
 # ******* Compose *******
 
@@ -719,6 +737,12 @@ describe 'json1', ->
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
 
+      it 'vs drop (list)', -> xf
+        op1: [[0, p:0], [4, d:0]]
+        op2: [[5, d:0], [10, p:0]]
+        expectLeft: [[0, p:0], [4, d:0]]
+        expectRight: [[0, p:0], [5, d:0]]
+
       it 'vs drop (chained)', -> xf
         op1: [['a', p:1], ['x', p:0], ['z', d:0, 'a', d:1]]
         op2: [['y', p:0], ['z', d:0]]
@@ -780,6 +804,12 @@ describe 'json1', ->
         op2: ['z', i:10]
         expectLeft: ['z', r:true, i:5]
         expectRight: null
+
+      it 'vs insert at list position', -> xf
+        op1: [5, i:'hi']
+        op2: [5, i:'there']
+        expectLeft: [5, i:'hi']
+        expectRight: [6, i:'hi']
 
       it 'vs identical insert', -> xf
         op1: ['z', i:5]
