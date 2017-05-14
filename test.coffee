@@ -62,28 +62,29 @@ xf = ({op1, op2, expect, expectLeft, expectRight, debug, lnf}) ->
 diamond = ({doc, op1, op2}) ->
   type.debug = false
 
-  # Test that the diamond property holds
-  op1_ = transform op1, op2, 'left'
-  op2_ = transform op2, op1, 'right'
-
-  doc1 = type.apply doc, op1
-  doc2 = type.apply doc, op2
-
-  doc12 = type.apply doc1, op2_
-  doc21 = type.apply doc2, op1_
-
   try
+    # Test that the diamond property holds
+    op1_ = transform op1, op2, 'left'
+    op2_ = transform op2, op1, 'right'
+
+    doc1 = type.apply doc, op1
+    doc2 = type.apply doc, op2
+
+    doc12 = type.apply doc1, op2_
+    doc21 = type.apply doc2, op1_
+
     assert.deepStrictEqual doc12, doc21
   catch e
     log.quiet = false
     log '\nOops! Diamond property does not hold. Given document', doc
-    log 'op1', op1, 'op2_', op2_
+    log 'op1 ', op1, '   /    op2', op2
+    log 'op1_', op1_, '   /    op2_', op2_
     log '---- 1'
     log 'op1', op1, '->', doc1
-    log 'op2', op2, '->', doc12
+    log 'op2', op2_, '->', doc12
     log '---- 2'
     log 'op2', op2, '->', doc2
-    log 'op1', op1, '->', doc21
+    log 'op1', op1_, '->', doc21
     log '----------'
     log doc12, '!=', doc21
     throw e
@@ -449,6 +450,13 @@ describe 'json1', ->
       op1: [ 0, { r: true } ]
       op2: [ 0, { d: 0 }, 0, { p: 0 } ] # Valid because lists.
       expect: [[0, r:true], [1, r:true]]
+
+    it 'colliding drops', -> xf
+      doc: [ 'a', 'b', {} ]
+      op1: [ [ 0, { p: 0 } ], [ 1, 'x', { d: 0 } ] ] # -> ['b', x:'a']
+      op2: [ 1, { p: 0 }, 'x', { d: 0 } ] # -> ['a', x:'b']
+      expectLeft: [[0, p:0, 'x', d:0], [1, 'x', r:true]]
+      expectRight: [0, r:true]
 
 # ******* Compose *******
 

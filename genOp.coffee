@@ -4,7 +4,6 @@
 assert = require 'assert'
 {writeCursor} = require './lib/cursor'
 log = require './lib/log'
-log.quiet = false
 type = require './lib/json1'
 
 
@@ -109,7 +108,6 @@ set = (container, key, value) ->
       container[key] = value
 
 module.exports = genRandomOp = (data) ->
-  log.quiet = false
   log 'genRandomOp', data
 
   container = data: clone data
