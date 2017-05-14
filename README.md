@@ -1,17 +1,12 @@
 # JSON1
 
-> Note: This is *not complete*. See the notes at the top of json1.coffee for
-> the list of work that needs to happen before you should use this code.
+> Note: This is *not complete*. See [this issue](https://github.com/josephg/json1/issues/4) for up to date information.
 
 This is an operational transformation type for arbitrary JSON trees thats been
 a work in progress for a few years. It is written to replace
 [ottypes/json0](https://github.com/ottypes/json0).
 
-The full spec is listed in [spec.md](spec.md).
-
-The type itself is self contained in [json1.coffee](json1.coffee). I'll migrate
-the code to pure javascript and remove all the other experimental junk in this
-repo when its a bit closer to being ready.
+The spec is listed in [spec.md](spec.md).
 
 
 ## License
