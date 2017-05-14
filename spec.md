@@ -94,40 +94,6 @@ An operation is a tree. Each node in the tree mirrors a location in the document
 
 Most nodes simply contain descents into their children, so the tree ends up being this sort of alternating 2 level affair. For example, to pick up `x.y.z` an operation would have `{o:{x:{o:{y:{o:{z:{p:0}}}}}}}`. It feels pretty silly, and I'm sure there's a cleaner answer. I'm doing it this way because its important to know whether we're descending into a list or an object during transform. (And we might descend into both during different phases of the operation if an object is replaced with a list). I'd love some suggestions on better ways to express this.
 
-## Initializing data ('set null')
-
-Its quite common to want to initialize data on first use. This can cause problems - what happens if another user tries to initialize the data at the same time?
-
-If the two clients try to insert `{tags:['rock']}` and `{tags:['roll']}`, one client's insert will win and the other client's edit would be lost. The document will either contain 'rock' or 'roll', but not both.
-
-In JSON0 there is no solution to this problem. In JSON1 the semantics of `insert` are specially chosen to allow this.
-
-The rules are:
-
-- If two identical inserts happen, they 'both win', and both inserts are kept in the final document.
-- Inserts, drops and edits can be embedded inside another insert.
-
-Together, these rules allow clients to concurrently initialize a document without bumping heads. Eg if these two operations are run concurrently:
-
-    [{i:{tags:[]}}, 'tags', 0, {i:'rock'}]
-
-and
-
-    [{i:{tags:[]}}, 'tags', 0, {i:'roll'}]
-
-then the document will end up with the contents `{tags:['rock', 'roll']}`.
-
-This also works with editing:
-
-    [{i:'', es:["aaa"]}]
-
-and
-
-    [{i:'', es:["bbb"]}]
-
-Will result in the document containing either "aaabbb" or "bbbaaa".
-
-
 ## A note on order
 
 The pickup phase does a post-order traversal of the tree (items are picked up after traversing the children) and the drop phase does a pre-order traversal (items are dropped before traversing into the children). This lets you move an item and move its children at the same time, but you need to pick up an item's children relative to the parent's original location and drop them relative to the parent's new location.
@@ -185,3 +151,56 @@ Rewrite the document {x:{y:{secret:"data"}}} as {y:{x:{secret:"data"}}}:
 ```
 
 (Translation: Go into x.y and pick up the data (slot 0). Set doc.y = {}. Set doc.y.x = data (slot 0).)
+
+---
+
+# Common issues and questions
+
+## Initializing data ('set null')
+
+Its quite common to want to initialize data on first use. This can cause problems - what happens if another user tries to initialize the data at the same time?
+
+If the two clients try to insert `{tags:['rock']}` and `{tags:['roll']}`, one client's insert will win and the other client's edit would be lost. The document will either contain 'rock' or 'roll', but not both.
+
+In JSON0 there is no solution to this problem. In JSON1 the semantics of `insert` are specially chosen to allow this.
+
+The rules are:
+
+- If two identical inserts happen, they 'both win', and both inserts are kept in the final document.
+- Inserts, drops and edits can be embedded inside another insert.
+
+Together, these rules allow clients to concurrently initialize a document without bumping heads. Eg if these two operations are run concurrently:
+
+    [{i:{tags:[]}}, 'tags', 0, {i:'rock'}]
+
+and
+
+    [{i:{tags:[]}}, 'tags', 0, {i:'roll'}]
+
+then the document will end up with the contents `{tags:['rock', 'roll']}`.
+
+This also works with editing:
+
+    [{i:'', es:["aaa"]}]
+
+and
+
+    [{i:'', es:["bbb"]}]
+
+Will result in the document containing either "aaabbb" or "bbbaaa".
+
+
+## Inverting operations
+
+The JSON1 OT type is designed to be optionally invertible. There are no constraints on the content of `r:` components, so the contents of the removed elements can be placed there.
+
+To implement this, we need a (unwritten) function which takes an operation and a document snapshot and augments all `r:X` components with the content to be removed.
+
+Then an invert function can be written which swaps `i` and `r` components and `p` and `d` components. It'll also need to move all edits to the item's source location.
+
+The extra information in `r:X` components will be lost if the operation is transformed.
+
+
+> **Add information about conflicts**
+
+> **Add information about the lost and found list**
