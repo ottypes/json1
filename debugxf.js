@@ -13,10 +13,23 @@ function log(first, ...args) {
 }
 
 
-const {apply, transform} = type
+const {transform} = type
 
 const transformX = (left, right) =>
   [transform(left, right, 'left'), transform(right, left, 'right')]
+
+
+const apply = (doc, op) => {
+  try {
+    return type.apply(doc, op)
+  } catch (e) {
+    log.quiet = false
+    log('error in apply')
+    log('doc', doc)
+    log('op', op)
+    throw e
+  }
+}
 
 
 function debugxf(orig, ops1, ops2) {
@@ -58,18 +71,20 @@ function debugxf(orig, ops1, ops2) {
   log('----- diamond')
 
   for (let i1 = 0; i1 < ops1.length; i1++) {
-    for (let i2 = 0; i2 < ops1.length; i2++) {
+    for (let i2 = 0; i2 < ops2.length; i2++) {
       const [op1, _, doc1] = get(i1+1, i2)
       const [__, op2, doc2] = get(i1, i2+1)
       log('----', i1, i2, op1, op2)
 
       const [op1_, op2_] = transformX(op1, op2)
 
-      const doc12 = apply(doc1, op2_)
-      const doc21 = apply(doc2, op1_)
+      let doc12, doc21
 
       try {
+        doc12 = apply(doc1, op2_)
+        doc21 = apply(doc2, op1_)
         assert.deepStrictEqual(doc12, doc21)
+        log('->--', op1_, op2_)
       } catch (e) {
         console.error('*********** Blerp')
 
@@ -95,10 +110,18 @@ function debugxf(orig, ops1, ops2) {
   log('final result', get(ops1.length, ops2.length)[2])
 }
 
+/*
 debugxf(
   {"snicker":[[[[]],[[["He",""],"frabjous"]]],null,null]},
   [["snicker",0,1,0,1,{"r":true}],["snicker",1,{"r":true}],["snicker",0,1,0,{"d":0},0,0,{"p":0}]],
   [["snicker",1,{"r":true}],["snicker",0,1,0,{"r":true}],["snicker",0,0,0,{"p":0,"d":0}],["snicker",0,{"d":0},0,0,{"p":0}],[["and",{"d":0}],["snicker",{"p":0}]]])
+*/
+
+debugxf([[0,[{"tree":""}]]],
+  [[0,0,{"i":"as"}],[0,{"p":0,"d":0}],[0,[0,{"p":0}],[1,{"d":0}]],[0,1,{"p":0},0,"thought",{"d":0}],[0,0,{"r":true}]],
+  [[0,0,{"p":0},0,"thought",{"d":0}],[0,{"p":0,"d":0}]]
+)
+
 
 /*
 debugxf("hi there", [
@@ -113,6 +136,7 @@ debugxf(['a', 'b'],
   [[1, { p: 0, d: 0 }]])
 */
 
+/*
 debugxf([ { Twas: [ '', 'toves' ], mimsy: 0 } ],
   [ [ 0, 'Twas', [ 0, { p: 0 } ], [ 1, { d: 0 } ] ],
     [ 0, [ 'Twas', 2, { d: 0 } ], [ 'mimsy', { p: 0 } ] ],
@@ -120,4 +144,4 @@ debugxf([ { Twas: [ '', 'toves' ], mimsy: 0 } ],
   [ [ 0, { i: 'the' } ],
     [ 0, { p: 0 }, 'and', { d: 0 } ],
     [ 0, 'Twas', 1, { p: 0, d: 0 } ],
-    [ 0, { p: 0, d: 0 } ] ])
+    [ 0, { p: 0, d: 0 } ] ])*/
