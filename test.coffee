@@ -96,7 +96,7 @@ describe 'json1', ->
 
     it 'allows some simple valid ops', ->
       pass null
-      pass [{es:"hi"}]
+      pass [{es:["hi"]}]
       pass [{e:"hi", et:'simple'}]
       pass [{i:[1,2,3]}]
       pass [{r:{}}]
@@ -202,6 +202,11 @@ describe 'json1', ->
     it 'allows inserts inside inserts', ->
       pass [1, i:{}, 'x', i:10]
       pass [[0, 'x', p:0], [1, i:{}, 'x', d:0, 'y', i:10]]
+
+    it.skip 'fails if the operation drops items inside something it picked up', ->
+      fail ['x', r:true, 1, i:'hi']
+      fail ['x', d:0, 1, p:0]
+      fail [r:true, 1, p:0, d:0]
 
     describe 'edit', ->
       it 'requires all edits to specify their type', ->
@@ -333,6 +338,7 @@ describe 'json1', ->
       op: [es:[]]
       expect: ''
 
+    # ------ These have nothing to do with apply. TODO: Move them out of this grouping.
     it 'diamond', ->
       # TODO: Do this for all combinations.
       diamond
@@ -459,7 +465,7 @@ describe 'json1', ->
 
 # ******* Compose *******
 
-  describe.skip 'compose', ->
+  describe 'compose', ->
     compose = ({op1, op2, expect}) ->
       result = type.compose op1, op2
       assert.deepStrictEqual result, expect
@@ -474,6 +480,11 @@ describe 'json1', ->
         op1: [['x', p:0], ['y', d:0]]
         op2: ['y', r:true]
         expect: ['x', r:true]
+
+      it 'vs remove parent', -> compose
+        op1: [['x', p:0], ['y', 0, d:0]]
+        op2: ['y', r:true]
+        expect: [['x', r:true], ['y', r:true]]
 
       it 'vs remove child', -> compose
         op1: [['x', p:0], ['y', d:0]]
@@ -490,11 +501,21 @@ describe 'json1', ->
         op2: [['y', p:0], ['z', d:0]]
         expect: [['x', p:0], ['z', d:0]]
 
+      it 'is transformed by op2 picks', -> compose
+        op1: [['x', p:0], ['y', 10, d:0]]
+        op2: ['y', 0, r:true]
+        expect: [['x', p:0], ['y', [0, r:true], [9, d:0]]]
+
     describe 'op1 insert', ->
       it 'vs remove', -> compose
         op1: ['x', i:{a:'hi'}]
         op2: ['x', r:true]
         expect: null
+
+      it 'vs remove parent', -> compose
+        op1: ['x', 0, i:{a:'hi'}]
+        op2: ['x', r:true]
+        expect: ['x', r:true]
 
       it 'vs remove child', -> compose
         op1: ['x', i:{a:'hi', b:'woo'}]
@@ -505,6 +526,83 @@ describe 'json1', ->
         op1: ['x', i:{a:'hi', b:'woo'}]
         op2: [['x', r:true, 'a', p:0], ['y', d:0]]
         expect: ['y', i:'hi']
+
+      it 'vs remove an embedded insert', -> compose
+        op1: ['x', i:{}, 'y', i:'hi']
+        op2: ['x', 'y', r:true]
+        expect: ['x', i:{}]
+
+      it 'vs remove from an embedded insert', -> compose
+        op1: ['x', i:{}, 'y', i:[1,2,3]]
+        op2: ['x', 'y', 1, r:true]
+        expect: ['x', i:{}, 'y', i:[1, 3]]
+
+      it 'picks the correct element of an embedded insert', -> compose
+        op1: ['x', i:['a', 'b', 'c'], 1, i:'XX']
+        op2: [['x', 1, p:0], ['y', d:0]]
+        expect: [['x', i:['a', 'b', 'c']], ['y', i:'XX']]
+
+      it 'moves all children', -> compose
+        op1: ['x', i:{}, 'y', i:[1,2,3]]
+        op2: [['x', p:0], ['z', d:0]]
+        expect: ['z', i:{}, 'y', i:[1,2,3]]
+      
+      it 'removes all children', -> compose
+        op1: ['x', i:{}, 'y', i:[1,2,3]]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'removes all children when removed at the destination', -> compose
+        op1: [['x', p:0], ['y', d:0, 0, i:'hi']]
+        op2: ['y', r:true]
+        expect: ['x', r:true]
+
+      it 'vs op2 insert', -> compose # Inserts aren't folded together.
+        op1: [i:{}]
+        op2: ['x', i:'hi']
+        expect: [i:{}, 'x', i:'hi']
+ 
+    describe 'op1 edit', ->
+      it 'removes the edit if the edited object is deleted', -> compose
+        op1: ['x', es:['hi']]
+        op2: ['x', r:true]
+        expect: ['x', r:true]
+
+      it 'removes the edit in an embedded insert 1', -> compose
+        op1: ['x', i:'', es:['hi']]
+        op2: ['x', r:true]
+        expect: null
+
+      it 'removes the edit in an embedded insert 2', -> compose
+        op1: ['x', i:[''], 0, es:['hi']]
+        op2: ['x', 0, r:true]
+        expect: ['x', i:[]]
+
+      it 'composes edits', -> compose
+        op1: [es:['hi']]
+        op2: [es:[2, ' there']]
+        expect: [es:['hi there']]
+
+      it 'transforms and composes edits', -> compose
+        op1: ['x', es:['hi']]
+        op2: [['x', p:0], ['y', d:0, es:[2, ' there']]]
+        expect: [['x', p:0], ['y', d:0, es:['hi there']]]
+
+      it 'preserves inserts with edits', -> compose
+        op1: ['x', i:'hi']
+        op2: [['x', p:0], ['y', d:0, es:[' there']]]
+        expect: ['y', i:'hi', es:[' there']]
+
+      it 'allows a different edit in the same location', -> compose
+        op1: ['x', es:['hi']]
+        op2: ['x', r:true, i:'yo', es:[2, ' there']]
+        expect: ['x', r:true, i:'yo', es:[2, ' there']]
+
+    describe 'op2 pick', ->
+      it 'gets untransformed by op1 drops', ->
+        op1: [5, i:'hi']
+        op2: [6, r:true]
+        expect: [5, r:true, i:'hi']
 
     describe 'op1 insert containing a drop', ->
       it 'vs pick at insert', -> compose
