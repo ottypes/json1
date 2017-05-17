@@ -542,6 +542,12 @@ describe 'json1', ->
         op2: [['x', 1, p:0], ['y', d:0]]
         expect: [['x', i:['a', 'b', 'c']], ['y', i:'XX']]
 
+      it 'picks the correct element of an embedded insert 2', -> compose
+        op1: ['x', i:['a', 'b', 'c'], 1, i:'XX']
+        op2: [['x', 3, p:0], ['y', d:0]] # should grab 'c'.
+        expect: [['x', i:['a', 'b'], 1, i:'XX'], ['y', i:'c']]
+
+
       it 'moves all children', -> compose
         op1: ['x', i:{}, 'y', i:[1,2,3]]
         op2: [['x', p:0], ['z', d:0]]
@@ -612,18 +618,10 @@ describe 'json1', ->
 
 
   # *** Old stuff
-  describe.skip 'old compose', ->
+  describe 'old compose', ->
     compose = ({op1, op2, expect}) ->
       result = type.compose op1, op2
       assert.deepStrictEqual result, expect
-
-    it 'composes null and another op to that other op', ->
-      t = (op) ->
-        compose {op1:op, op2:null, expect:op}
-        compose {op1:null, op2:op, expect:op}
-
-      t [['x', p:0], ['y', d:0]]
-      t [[1, p:0], [2, d:0]]
 
     it 'gloms together unrelated edits', ->
       compose
@@ -633,38 +631,33 @@ describe 'json1', ->
 
       compose
         op1: [2, i:'hi']
-        op2: [0, 'x', r:{}]
-        expect: [[0, 'x', r:{}], [2, i:"hi"]]
+        op2: [0, 'x', r:true]
+        expect: [[0, 'x', r:true], [2, i:"hi"]]
 
-    it 'translates drops in objects', ->
-      compose
-        op1: ['x', ['a', p:0], ['b', d:0]] # x.a -> x.b
-        op2: [['x', p:0], ['y', d:0]] # x -> y
-        expect: [['x', {p:0}, 'a', {p:1}], ['y', {d:0}, 'b', {d:1}]] # x.a -> y.b, x -> y
+    it 'translates drops in objects', -> compose
+      op1: ['x', ['a', p:0], ['b', d:0]] # x.a -> x.b
+      op2: [['x', p:0], ['y', d:0]] # x -> y
+      expect: [['x', {p:0}, 'a', {p:1}], ['y', {d:0}, 'b', {d:1}]] # x.a -> y.b, x -> y
 
-    it 'untranslates picks in objects', ->
-      compose
-        op1: [['x', p:0], ['y', d:0]] # x -> y
-        op2: [['y', 'a', p:0], ['z', d:0]] # y.a -> z
-        expect: [['x',p:0,'a',p:1], ['y',d:1], ['z',d:0]] # x.a -> z, x -> y
+    it 'untranslates picks in objects', -> compose
+      op1: [['x', p:0], ['y', d:0]] # x -> y
+      op2: [['y', 'a', p:0], ['z', d:0]] # y.a -> z
+      expect: [['x',p:0,'a',p:1], ['y',d:0], ['z',d:1]] # x.a -> z, x -> y
 
-    it 'insert gets carried wholesale', ->
-      compose
-        op1: ['x', i:'hi there']
-        op2: [['x', p:0], ['y', d:0]] # x -> y
-        expect: ['y', i:'hi there']
+    it 'insert gets carried wholesale', -> compose
+      op1: ['x', i:'hi there']
+      op2: [['x', p:0], ['y', d:0]] # x -> y
+      expect: ['y', i:'hi there']
 
-    it 'insert gets edited by the op', ->
-      compose
-        op1: ['x', {i:{a:1, b:2, c:3}}]
-        op2: [['x', 'a', {p:0}], ['y', d:0]]
-        expect: [['x', {i:{b:2, c:3}}], ['y', {i:1}]]
+    it 'insert gets edited by the op', -> compose
+      op1: ['x', {i:{a:1, b:2, c:3}}]
+      op2: [['x', 'a', p:0], ['y', d:0]]
+      expect: [['x', {i:{b:2, c:3}}], ['y', i:1]]
 
-    it 'merges mutual inserts', ->
-      compose
-        op1: [i:{}]
-        op2: ['x', i:"hi"]
-        expect: [i:{x:"hi"}]
+    it 'does not merge mutual inserts', -> compose
+      op1: [i:{}]
+      op2: ['x', i:"hi"]
+      expect: [i:{}, 'x', i:'hi']
 
     # TODO: List nonsense.
 
