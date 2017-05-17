@@ -616,6 +616,15 @@ describe 'json1', ->
         op2: [['y', p:0], ['z', d:0]]
         expect: [['x', p:0], ['z', i:{}, 'x', d:0]]
 
+    describe 'fuzzer tests', ->
+      it 'complicated transform of indicies', -> compose
+        op1: [ 0, { p: 0 }, 'x', 2, { d: 0 } ]
+        op2: [ 0, 'x', 0, { r: true } ]
+        expect: [
+          [0, p:0, 'x', 1, d:0],
+          [1, 'x', 0, r:true]
+        ]
+
 
   # *** Old stuff
   describe 'old compose', ->
