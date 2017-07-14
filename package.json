@@ -9,7 +9,8 @@
   "devDependencies": {
     "mocha": "^2.3.3",
     "ot-simple": "^1.0.0",
-    "ot-fuzzer": "^1.0.0"
+    "ot-fuzzer": "^1.0.0",
+    "coffee-script": "*"
   },
   "scripts": {
     "test": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks test.coffee",
