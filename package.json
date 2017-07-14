@@ -1,6 +1,6 @@
 {
   "name": "ot-json1",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "JSON OT type",
   "main": "index.js",
   "dependencies": {

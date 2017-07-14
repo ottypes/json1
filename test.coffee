@@ -339,6 +339,7 @@ describe 'json1', ->
       expect: ''
 
     # ------ These have nothing to do with apply. TODO: Move them out of this grouping.
+ 
     it 'diamond', ->
       # TODO: Do this for all combinations.
       diamond
@@ -462,6 +463,26 @@ describe 'json1', ->
       op1: [ [ 'the', { r: true, d: 0 } ], [ 'whiffling', { p: 0 } ] ]
       op2: [ 'the', { p: 0, d: 0 } ]
       expect: [ [ 'the', { d: 0, r: true } ], [ 'whiffling', { p: 0 } ] ]
+
+    it.skip 'transforms subtype when the edit is moved', -> xf
+      op1: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
+      op2: [ 'x', { es: [ d: 1, 'Z' ] } ]
+      expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
+      expectRight: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
+
+    it.skip 'xf lots', -> xf
+      op1: [['a', p:0], ['b', d:0, es:['hi']]]
+      op2: [['a', p:0], ['c', d:0]]
+      expectLeft: [['b', d:0, es:['hi']], ['c', p:0]]
+      expectRight: ['c', es:['hi']]
+
+    it.skip 'inserts are moved back by the other op', -> xf
+      op1: [['a', p:0], ['b', d:0, 'x', i:'hi']]
+      op2: [['a', p:0], ['c', d:0]]
+      expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
+      expectRight: ['c', 'x', i:'hi']
+      
+
 
 # ******* Compose *******
 
