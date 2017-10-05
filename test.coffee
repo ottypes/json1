@@ -233,6 +233,24 @@ describe 'json1', ->
 
       it 'does not allow anything inside an edited subtree'
 
+  describe 'normalize', ->
+    n = (opIn, expect) ->
+      expect = opIn if expect == undefined
+      op = type.normalize opIn
+      assert.deepStrictEqual op, expect
+
+    it 'does the right thing for noops', ->
+      n null
+      n [], null
+
+    it 'normalizes some regular ops', ->
+      n [{i:'hi'}]
+      n [{i:'hi'}, 1,2,3], [{i:'hi'}]
+      n [[1,2,3, {p:0}], [1,2,3, {d:0}]], [1,2,3, {p:0, d:0}]
+      n [[1,2,3, {p:0}], [1,2,30, {d:0}]], [1,2, [3, {p:0}], [30, {d:0}]]
+      n [[1,2,30, {p:0}], [1,2,3, {d:0}]], [1,2, [3, {d:0}], [30, {p:0}]]
+
+
 # ****** Apply ******
 
   describe 'apply', ->
@@ -339,7 +357,7 @@ describe 'json1', ->
       expect: ''
 
     # ------ These have nothing to do with apply. TODO: Move them out of this grouping.
- 
+
     it 'diamond', ->
       # TODO: Do this for all combinations.
       diamond
@@ -481,7 +499,7 @@ describe 'json1', ->
       op2: [['a', p:0], ['c', d:0]]
       expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
       expectRight: ['c', 'x', i:'hi']
-      
+
 
 
 # ******* Compose *******
@@ -573,7 +591,7 @@ describe 'json1', ->
         op1: ['x', i:{}, 'y', i:[1,2,3]]
         op2: [['x', p:0], ['z', d:0]]
         expect: ['z', i:{}, 'y', i:[1,2,3]]
-      
+
       it 'removes all children', -> compose
         op1: ['x', i:{}, 'y', i:[1,2,3]]
         op2: ['x', r:true]
@@ -588,7 +606,7 @@ describe 'json1', ->
         op1: [i:{}]
         op2: ['x', i:'hi']
         expect: [i:{}, 'x', i:'hi']
- 
+
     describe 'op1 edit', ->
       it 'removes the edit if the edited object is deleted', -> compose
         op1: ['x', es:['hi']]
@@ -645,6 +663,18 @@ describe 'json1', ->
           [0, p:0, 'x', 1, d:0],
           [1, 'x', 0, r:true]
         ]
+
+    describe 'regression', ->
+      it 'skips op2 drops when calculating op1 drop index simple', -> compose
+        op1: [[ 0, { p: 0 } ], [ 2, { d: 0 } ]]
+        op2: [[ 0, { p: 0 } ], [ 1, { d: 0 } ]]
+        expect: [ [ 0, { p: 1 } ], [ 1, { p: 0, d: 0 } ], [ 2, { d: 1 } ] ]
+
+      it 'skips op2 drops when calculating op1 drop index complex', -> compose
+        op1: [[0, {p:0, d:1}], [1, p:1], [2, d:0]]
+        op2: [[0, p:0], [1, d:0]]
+        # expect: [[0, {p:1}], [1, {d:0, p:0}], [2, d:1]]
+        expect: [[0, p:1], [1, {p:0, d:0}], [2, d:1]]
 
 
   # *** Old stuff
@@ -1033,7 +1063,7 @@ describe 'json1', ->
         op1: [[0, i:'xx', 'a', r:true], [1, 'a', i:'hi']]
         op2: [[0, p:0], [3, d:0]]
         expect: [[0, i:'xx'], [3, 'a', r:true], [4, 'a', i:'hi']]
-        
+
 
     describe 'list', ->
       describe 'drop', ->

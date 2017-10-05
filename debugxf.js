@@ -116,5 +116,6 @@ debugxf(['a', 'b'],
   [[1, { p: 0, d: 0 }]])
 */
 
-debugxf({"stood":0,"mome":"bite","back":"gimble"}, [[["mome",{"p":0}],["the",{"d":0}]],["hand",{"i":""}],[["the",{"p":0}],["were",{"d":0}]],["hand",{"r":true}]], [["the",{"i":""}],[["mome",{"p":0}],["whiffling",{"d":0}]],["sword",{"i":null}],["the",{"p":0,"d":0}]])
+
+debugxf({"eyes":"and"}, [[["eyes",{"p":0}],["wabe",{"d":0,"es":[2,"awhile Beware "]}]]], [["eyes",{"es":[1,{"d":1},"as "]}]])
 
