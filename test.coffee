@@ -729,10 +729,10 @@ describe 'json1', ->
         # expect: [[0, {p:1}], [1, {d:0, p:0}], [2, d:1]]
         expect: [[0, p:1], [1, {p:0, d:0}], [2, d:1]]
 
-      it.skip '3', -> compose
+      it '3', -> compose
         op1: [ { i: [ null, [] ] }, 0, { i: '' } ]
         op2: [ 1, { p: 0 }, 0, { d: 0 } ]
-        expect: null# ????  [ { i: [ [], null ] }, 0, { i: '' } ]
+        expect: [ { i: [ [] ] }, [ 0, { i: '' } ], [ 1, 0, { i: null } ] ]
 
 
   # *** Old stuff
