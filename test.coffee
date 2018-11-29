@@ -522,7 +522,7 @@ describe 'json1', ->
       expectLeft: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
       expectRight: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
 
-    it.skip 'transforms edits when the parent is moved', -> xf
+    it 'transforms edits when the parent is moved', -> xf
       op1: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
       op2: [ 'x', { es: [ d: 1, 'Z' ] } ]
       expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
@@ -1081,8 +1081,8 @@ describe 'json1', ->
         expectRight: ['x', es:[2, 'ab']]
 
       it 'vs move and edit', -> xf
-        op1: ['x', es:['ab']]
-        op2: [['x', p:0], ['y', d:0, es:['cd']]]
+        op1: ['x', es:[1, 'ab']]
+        op2: [['x', p:0], ['y', d:0, es:[d:1, 'cd']]]
         expectLeft: ['y', es:['ab']]
         expectRight: ['y', es:[2, 'ab']]
 
