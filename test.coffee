@@ -12,12 +12,6 @@ log = require './lib/log'
 {transform} = type
 deepClone = require './lib/deepClone'
 
-# Transform tests
-
-printRepro = (op1, op2, direction, expect) ->
-  console.error 'FAIL! Repro with:'
-  console.log "transform #{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}'"
-
 apply = ({doc:snapshot, op, expect}) ->
   type.debug = false
 
@@ -25,6 +19,28 @@ apply = ({doc:snapshot, op, expect}) ->
   result = type.apply snapshot, op
   assert.deepStrictEqual snapshot, orig, 'Original snapshot was mutated'
   assert.deepStrictEqual result, expect
+
+
+printComposeRepro = (op1, op2, expect) ->
+  console.error 'FAIL! Repro with:'
+  console.log "compose( #{JSON.stringify(op1)}, #{JSON.stringify(op2)} )"
+  console.log "expected output: #{JSON.stringify(expect)}"
+
+compose = ({op1, op2, expect}) ->
+  try
+    result = type.compose op1, op2
+    assert.deepStrictEqual result, expect
+  catch e
+    type.debug = true
+    printComposeRepro op1, op2, expect
+    #type.compose op1, op2
+    type.debug = false
+    throw e
+
+
+printXFRepro = (op1, op2, direction, expect) ->
+  console.error 'FAIL! Repro with:'
+  console.log "transform(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}')"
 
 xf = ({op1, op2, expect, expectLeft, expectRight, debug, lnf}) ->
   if expect != undefined then expectLeft = expectRight = expect
@@ -34,23 +50,25 @@ xf = ({op1, op2, expect, expectLeft, expectRight, debug, lnf}) ->
   opts = {lnf}
 
   try
-    #printRepro op1, op2, 'left', expectLeft
+    #printXFRepro op1, op2, 'left', expectLeft
     left = transform op1, op2, 'left', opts
     assert.deepStrictEqual left, expectLeft
   catch e
     type.debug = true
-    printRepro op1, op2, 'left', expectLeft
+    printXFRepro op1, op2, 'left', expectLeft
     transform op1, op2, 'left'
+    type.debug = false
     throw e
 
   try
-    #printRepro op1, op2, 'right', expectRight
+    #printXFRepro op1, op2, 'right', expectRight
     right = transform op1, op2, 'right', opts
     assert.deepStrictEqual right, expectRight
   catch e
     type.debug = true
-    printRepro op1, op2, 'right', expectRight
+    printXFRepro op1, op2, 'right', expectRight
     transform op1, op2, 'right'
+    type.debug = false
     throw e
 
 diamond = ({doc, op1, op2}) ->
@@ -249,6 +267,12 @@ describe 'json1', ->
       n [[1,2,3, {p:0}], [1,2,3, {d:0}]], [1,2,3, {p:0, d:0}]
       n [[1,2,3, {p:0}], [1,2,30, {d:0}]], [1,2, [3, {p:0}], [30, {d:0}]]
       n [[1,2,30, {p:0}], [1,2,3, {d:0}]], [1,2, [3, {d:0}], [30, {p:0}]]
+
+    it 'normalizes embedded ops when available'
+
+    it.skip 'normalizes embedded removes', ->
+      n [1, {r:true}, 2, {r:true}], [1, {r:true}]
+      n [{r:true}, 2, {r:true}], [{r:true}]
 
 
 # ****** Apply ******
@@ -482,7 +506,23 @@ describe 'json1', ->
       op2: [ 'the', { p: 0, d: 0 } ]
       expect: [ [ 'the', { d: 0, r: true } ], [ 'whiffling', { p: 0 } ] ]
 
-    it.skip 'transforms subtype when the edit is moved', -> xf
+    it 'transforms drops when the parent is moved by a remove', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 0, {r:1}]
+      expect: [['a', {p:0}], ['b', {d:0}, 0, {i:2}]]
+
+    it 'transforms drops when the parent is moved by a drop', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 0, {i:1}]
+      expect: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
+
+    it 'transforms conflicting drops obfuscated by a move', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 1, {i:1}]
+      expectLeft: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      expectRight: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
+
+    it.skip 'transforms edits when the parent is moved', -> xf
       op1: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
       op2: [ 'x', { es: [ d: 1, 'Z' ] } ]
       expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
@@ -505,10 +545,6 @@ describe 'json1', ->
 # ******* Compose *******
 
   describe 'compose', ->
-    compose = ({op1, op2, expect}) ->
-      result = type.compose op1, op2
-      assert.deepStrictEqual result, expect
-
     it 'composes empty ops to nothing', -> compose
       op1: null
       op2: null
@@ -628,7 +664,7 @@ describe 'json1', ->
         op2: [es:[2, ' there']]
         expect: [es:['hi there']]
 
-      it 'transforms and composes edits', -> compose
+      it.skip 'transforms and composes edits', -> compose
         op1: ['x', es:['hi']]
         op2: [['x', p:0], ['y', d:0, es:[2, ' there']]]
         expect: [['x', p:0], ['y', d:0, es:['hi there']]]
@@ -664,6 +700,23 @@ describe 'json1', ->
           [1, 'x', 0, r:true]
         ]
 
+    describe.skip 'setnull interaction', ->
+      # Currently failing.
+      it 'reorders items inside a setnull region', -> compose
+        op1: [{i:[]}, [0, {i:'a'}], [1, {i:'b'}]]
+        op2: [[0, {p:0}], [1, {d:0}]]
+        expect: [{i:[]}, [0, {i:'b'}], [1, {i:'a'}]]
+
+      it 'lets a setnull child be moved', -> compose
+        op1: ['list', {i:[]}, 0, {i:'hi'}]
+        op2: [['list', 0, p:0], ['z', d:0]]
+        expect: [['list', {i:[]}], ['z', i:'hi']]
+
+      it 'lets a setnull child get modified', -> compose
+        op1: [{i:[]}, 0, {i:['a']}]
+        op2: [0, 0, {r:'a', i:'b'}]
+        expect: [{i:[]}, 0, {i:['b']}]
+
     describe 'regression', ->
       it 'skips op2 drops when calculating op1 drop index simple', -> compose
         op1: [[ 0, { p: 0 } ], [ 2, { d: 0 } ]]
@@ -676,13 +729,14 @@ describe 'json1', ->
         # expect: [[0, {p:1}], [1, {d:0, p:0}], [2, d:1]]
         expect: [[0, p:1], [1, {p:0, d:0}], [2, d:1]]
 
+      it.skip '3', -> compose
+        op1: [ { i: [ null, [] ] }, 0, { i: '' } ]
+        op2: [ 1, { p: 0 }, 0, { d: 0 } ]
+        expect: null# ????  [ { i: [ [], null ] }, 0, { i: '' } ]
+
 
   # *** Old stuff
   describe 'old compose', ->
-    compose = ({op1, op2, expect}) ->
-      result = type.compose op1, op2
-      assert.deepStrictEqual result, expect
-
     it 'gloms together unrelated edits', ->
       compose
         op1: [['a', p:0], ['b', d:0]]
