@@ -528,13 +528,13 @@ describe 'json1', ->
       expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
       expectRight: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
 
-    it.skip 'xf lots', -> xf
+    it 'xf lots', -> xf
       op1: [['a', p:0], ['b', d:0, es:['hi']]]
       op2: [['a', p:0], ['c', d:0]]
       expectLeft: [['b', d:0, es:['hi']], ['c', p:0]]
       expectRight: ['c', es:['hi']]
 
-    it.skip 'inserts are moved back by the other op', -> xf
+    it 'inserts are moved back by the other op', -> xf
       op1: [['a', p:0], ['b', d:0, 'x', i:'hi']]
       op2: [['a', p:0], ['c', d:0]]
       expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
