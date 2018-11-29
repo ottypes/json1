@@ -700,7 +700,7 @@ describe 'json1', ->
           [1, 'x', 0, r:true]
         ]
 
-    describe.skip 'setnull interaction', ->
+    describe 'setnull interaction', ->
       # Currently failing.
       it 'reorders items inside a setnull region', -> compose
         op1: [{i:[]}, [0, {i:'a'}], [1, {i:'b'}]]
@@ -715,7 +715,8 @@ describe 'json1', ->
       it 'lets a setnull child get modified', -> compose
         op1: [{i:[]}, 0, {i:['a']}]
         op2: [0, 0, {r:'a', i:'b'}]
-        expect: [{i:[]}, 0, {i:['b']}]
+        expect: [{i:[]}, 0, {i: []}, 0, {i: 'b'}]
+        #expect: [{i:[]}, 0, {i:['b']}] # Maybe better??
 
     describe 'regression', ->
       it 'skips op2 drops when calculating op1 drop index simple', -> compose
