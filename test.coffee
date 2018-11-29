@@ -664,7 +664,7 @@ describe 'json1', ->
         op2: [es:[2, ' there']]
         expect: [es:['hi there']]
 
-      it.skip 'transforms and composes edits', -> compose
+      it 'transforms and composes edits', -> compose
         op1: ['x', es:['hi']]
         op2: [['x', p:0], ['y', d:0, es:[2, ' there']]]
         expect: [['x', p:0], ['y', d:0, es:['hi there']]]
