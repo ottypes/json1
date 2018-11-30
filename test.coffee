@@ -597,6 +597,26 @@ describe 'json1', ->
       op2: [0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ]]
       expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
 
+    it.skip 'composes simple regression', ->
+      # This currently emits 2 removes. Should be ok since it matches the
+      # appearance of the inverse.
+      compose
+        op1: [ 0, { p: 0, d: 0 } ]
+        op2: [ { r: true } ]
+        expect: [ { r: true } ]
+        # Currently: [ { r: true }, 0, { r: true } ]
+
+      compose
+        op1: [ 'a', 1, { r: true } ]
+        op2: [ 'a', { r: true } ]
+        expect: [ 'a', { r: true } ]
+        # Currently [ 'a', { r: true }, 1, { r: true } ]
+
+    it 'ignores op2 inserts for index position after op1 insert', -> xf
+      op1: [ { r:true, i: [] }, 0, { i: '' } ]
+      op2: [ 0, { i: 0 } ],
+      expect: [ { r: true, i: [] }, 0, { i: '' } ]
+
 
 # ******* Compose *******
 
