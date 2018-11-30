@@ -617,6 +617,11 @@ describe 'json1', ->
       op2: [ 0, { i: 0 } ],
       expect: [ { r: true, i: [] }, 0, { i: '' } ]
 
+    it 'edit moved inside a removed area should be removed', -> xf
+      op1: [[ 0, { r: true } ], [ 2, { es: [ ] } ]]
+      op2: [[ 0, 'x', { d: 0 } ], [ 3, { p: 0 } ]]
+      expect: [ 0, { r: true } ]
+
 
 # ******* Compose *******
 
