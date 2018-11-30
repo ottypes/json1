@@ -628,6 +628,24 @@ describe 'json1', ->
       expectLeft: [ [ 'x', [ 0, { p: 1 } ], [ 1, { d: 0 } ] ], [ 'z', { p: 0 } ], [ 'zzz', { d: 1 } ] ]
       expectRight: [ [ 'x', 0, { p: 0 } ], [ 'zzz', { d: 0 } ] ]
 
+    it 'handles index positions past cancelled drops 1', -> xf
+      op1: [ 0, { r: true, i: [ '' ] } ],
+      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 23 } ] ]
+      expectLeft: [ 0, { r: true, i: [ '' ] } ]
+      expectRight: [ [ 0, { r: true } ], [ 1, { i: [ '' ] } ] ]
+
+    it 'handles index positions past cancelled drops 2', -> xf
+      # This looks more complicated, but its a simpler version of the above test.
+      op1: [ [ 'a', { r: true } ], [ 'b', 0, { i: 'hi' } ] ]
+      op2: [ [ 'a', { p: 0 } ], [ 'b', [ 0, { d: 0 } ], [ 1, { i: 'yo' } ] ] ]
+      expectLeft: [ 'b', 0, { i: 'hi', r: true } ]
+      expectRight: [ 'b', [ 0, { r: true } ], [ 1, { i: 'hi' } ] ]
+
+    it 'handles transforming past cancelled move', -> xf
+      op1: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
+      op2: [ 0, { p: 0, d: 0 } ]
+      expect: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
+
 
 # ******* Compose *******
 
