@@ -569,6 +569,10 @@ describe 'json1', ->
       expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
       expectRight: ['c', 'x', i:'hi']
 
+    it 'more awful edit moves', -> xf
+      op1: [['a', p:0], ['c', d:0, 'x', es:[]]]
+      op2: ['a', ['b', d:0], ['x', p:0]]
+      expect: [['a', p:0], ['c', d:0, 'b', es:[]]]
 
 
 # ******* Compose *******
@@ -1201,6 +1205,7 @@ describe 'json1', ->
           op2: [['x', 'a', d:0], ['y', p:0]]
           lnf: ['lnf']
           expect: [['lnf', [0, d:0], [1, d:1]], ['x', p:0], ['y', p:1]]
+
 
   describe 'transform-old', ->
     it 'foo', ->
