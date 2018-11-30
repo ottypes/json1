@@ -16,15 +16,15 @@ apply = ({doc:snapshot, op, expect}) ->
   type.debug = false
 
   orig = deepClone snapshot
-  result = type.apply snapshot, op
-  assert.deepStrictEqual snapshot, orig, 'Original snapshot was mutated'
-  assert.deepStrictEqual result, expect
+  try
+    result = type.apply snapshot, op
+    assert.deepStrictEqual snapshot, orig, 'Original snapshot was mutated'
+    assert.deepStrictEqual result, expect
+  catch e
+    console.log "Apply failed! Repro apply( #{JSON.stringify(snapshot)}, #{JSON.stringify(op)} )"
+    console.log "expected output: #{JSON.stringify(expect)}"
+    throw e
 
-
-printComposeRepro = (op1, op2, expect) ->
-  console.error 'FAIL! Repro with:'
-  console.log "compose( #{JSON.stringify(op1)}, #{JSON.stringify(op2)} )"
-  console.log "expected output: #{JSON.stringify(expect)}"
 
 compose = ({op1, op2, expect}) ->
   try
@@ -32,7 +32,9 @@ compose = ({op1, op2, expect}) ->
     assert.deepStrictEqual result, expect
   catch e
     type.debug = true
-    printComposeRepro op1, op2, expect
+    console.error 'FAIL! Repro with:'
+    console.log "compose( #{JSON.stringify(op1)}, #{JSON.stringify(op2)} )"
+    console.log "expected output: #{JSON.stringify(expect)}"
     #type.compose op1, op2
     type.debug = false
     throw e
@@ -109,8 +111,20 @@ describe 'json1', ->
   after -> type.debug = false
 
   describe 'checkOp', ->
-    pass = (op) -> type.checkValidOp op
-    fail = (op) -> assert.throws -> type.checkValidOp op
+    pass = (op) ->
+      try
+        type.checkValidOp op
+      catch e
+        console.log("FAIL! Repro with:\ncheckOp( #{JSON.stringify(op)} )")
+        throw e
+
+    fail = (op) ->
+      try
+        assert.throws -> type.checkValidOp op
+      catch e
+        console.log("FAIL! Repro with:\ncheckOp( #{JSON.stringify(op)} )")
+        console.log('Should throw!')
+        throw e
 
     it 'allows some simple valid ops', ->
       pass null
@@ -251,6 +265,21 @@ describe 'json1', ->
 
       it 'does not allow anything inside an edited subtree'
 
+      it 'does not allow an edit inside removed or picked up content', ->
+        fail [r:true, 1, es:['hi']]
+        pass [1, r:true, 1, es:['hi']]
+        fail ['x', r:true, 1, es:['hi']]
+        pass [[1, p:0, 1, es:['hi']], [2, d:0]]
+        fail [['x', p:0, 1, es:['hi']], ['y', d:0]]
+
+      it 'does not allow you to drop inside something that was removed', ->
+        # These insert into the next list item
+        pass [[1, r:true, 1, d:0], [2, p:0]]
+        pass [1, {p: 0}, 'x', {d: 0}]
+
+        # But this is not ok.
+        fail ['x', {p:0}, 'a', {d:0}]
+
   describe 'normalize', ->
     n = (opIn, expect) ->
       expect = opIn if expect == undefined
@@ -305,11 +334,7 @@ describe 'json1', ->
         op: [r:true, i:null]
         expect: null
 
-      assert.throws ->
-        apply
-          doc: null
-          op: [{i:5}]
-          expect: 5
+      assert.throws -> type.apply null, [{i:5}]
 
       apply
         doc: undefined
@@ -363,6 +388,10 @@ describe 'json1', ->
       doc: {x: "yooo"}
       op: [['x', p:0], ['y', d:0, es:['sup']]]
       expect: {y: "supyooo"}
+
+    it 'throws when the op traverses missing items', ->
+      assert.throws -> type.apply [0, 'hi'], [1, p:0, 'x', d:0]
+      assert.throws -> type.apply {}, [p:0, 'a', d:0]
 
   describe 'fuzzer tests', ->
     it 'asdf', -> apply
