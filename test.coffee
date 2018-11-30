@@ -265,14 +265,17 @@ describe 'json1', ->
 
       it 'does not allow anything inside an edited subtree'
 
-      it 'does not allow an edit inside removed or picked up content', ->
+      it.skip 'does not allow an edit inside removed or picked up content', ->
         fail [r:true, 1, es:['hi']]
         pass [1, r:true, 1, es:['hi']]
         fail ['x', r:true, 1, es:['hi']]
         pass [[1, p:0, 1, es:['hi']], [2, d:0]]
         fail [['x', p:0, 1, es:['hi']], ['y', d:0]]
 
-      it 'does not allow you to drop inside something that was removed', ->
+        # This is actually ok.
+        pass [ 0, { p: 0 }, [ 'a', { es: [], r: true } ], [ 'x', { d: 0 } ] ]
+
+      it.skip 'does not allow you to drop inside something that was removed', ->
         # These insert into the next list item
         pass [[1, r:true, 1, d:0], [2, p:0]]
         pass [1, {p: 0}, 'x', {d: 0}]
