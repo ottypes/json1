@@ -592,6 +592,11 @@ describe 'json1', ->
       op2: [ [ 'a', { p: 0 } ], [ 'b', { d: 0 } ] ]
       expect: [ [ 'a', { i: {} }, 'x', { i: 'yo' } ], [ 'b', { r: true }, ] ]
 
+    it 'insert pushes edit target', -> xf
+      op1: [[ 0, { i: "yo" } ], [ 1, 'a', { es: [] }]]
+      op2: [0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ]]
+      expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
+
 
 # ******* Compose *******
 
