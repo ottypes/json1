@@ -574,6 +574,11 @@ describe 'json1', ->
       op2: ['a', ['b', d:0], ['x', p:0]]
       expect: [['a', p:0], ['c', d:0, 'b', es:[]]]
 
+    it 'inserts null', -> xf
+      op1: [ 'x', 'a', { i: null } ]
+      op2: [ [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
+      expect: [ 'y', 'a', { i: null } ]
+
 
 # ******* Compose *******
 
