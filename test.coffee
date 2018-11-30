@@ -735,6 +735,15 @@ describe 'json1', ->
         op2: [ 1, { p: 0 }, 0, { d: 0 } ]
         expect: [ { i: [ [] ] }, [ 0, { i: '' } ], [ 1, 0, { i: null } ] ]
 
+      it '4', -> compose # This one triggered a bug in cursor!
+        op1: [ 0,
+          [ 0, [ 'a', { r: true } ], [ 'b', { d: 0 } ] ],
+          [ 2, { p: 0 } ] ]
+        op2: [ 0, 0, 'c', { i: 'd' } ]
+        expect: [ 0,
+          [ 0, [ 'a', { r: true } ], [ 'b', { d: 0 } ], [ 'c', { i: 'd' } ] ],
+          [ 2, { p: 0 } ]
+        ]
 
   # *** Old stuff
   describe 'old compose', ->
@@ -975,6 +984,9 @@ describe 'json1', ->
         expectRight: [['a', p:0], ['b', d:0]]
 
       describe.skip 'vs move inside me', ->
+        # Note: This is *not* blackholeing! The edits are totally fine; we
+        # just need one edit to win.
+        # The current behaviour just nukes both.
         it 'in objects', -> xf
           op1: [['x', p:0], ['y', 'a', d:0]]
           op2: [['x', 'a', d:0], ['y', p:0]]
