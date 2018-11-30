@@ -622,6 +622,12 @@ describe 'json1', ->
       op2: [[ 0, 'x', { d: 0 } ], [ 3, { p: 0 } ]]
       expect: [ 0, { r: true } ]
 
+    it 'advances indexes correctly with mixed numbers', -> xf
+      op1: [ [ 'x', [ 0, { p: 0 } ], [ 1, { d: 1 } ] ], [ 'y', { p: 1 } ], [ 'zzz', { d: 0 } ] ]
+      op2: [ [ 'x', 2, { i: 'hi' } ], [ 'y', { p: 0 } ], [ 'z', { d: 0 } ] ]
+      expectLeft: [ [ 'x', [ 0, { p: 1 } ], [ 1, { d: 0 } ] ], [ 'z', { p: 0 } ], [ 'zzz', { d: 1 } ] ]
+      expectRight: [ [ 'x', 0, { p: 0 } ], [ 'zzz', { d: 0 } ] ]
+
 
 # ******* Compose *******
 
