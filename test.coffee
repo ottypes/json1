@@ -646,6 +646,11 @@ describe 'json1', ->
       op2: [ 0, { p: 0, d: 0 } ]
       expect: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
 
+    it 'correctly adjusts indexes in another fuzzer great', -> xf
+      op1: [ [ 0, { d: 0, r: true } ], [ 3, { p: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 3, { d: 0 } ] ]
+      expect: [[0, d:0], [2, p:0], [3, r:true]]
+
 
 # ******* Compose *******
 
