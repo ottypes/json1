@@ -579,6 +579,16 @@ describe 'json1', ->
       op2: [ [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
       expect: [ 'y', 'a', { i: null } ]
 
+    it 'preserves local insert if both sides delete', -> xf
+      op1: [ { i: {}, r: true }, 'x', { i: 'yo' } ]
+      op2: [ { r: true } ]
+      expect: [ { i: {} }, 'x', { i: 'yo' } ]
+
+    it 'handles insert/delete vs move', -> xf
+      op1: [ 'a', { i: {}, r: true }, 'x', { i: 'yo' } ]
+      op2: [ [ 'a', { p: 0 } ], [ 'b', { d: 0 } ] ]
+      expect: [ [ 'a', { i: {} }, 'x', { i: 'yo' } ], [ 'b', { r: true }, ] ]
+
 
 # ******* Compose *******
 
