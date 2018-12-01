@@ -653,6 +653,11 @@ describe 'json1', ->
       expectLeft: [ 1, [ 'burbled', { d: 0 } ], [ 'its', { r: true } ], [ 'thought', { p: 0 } ] ]
       expectRight: [ 1, 'its', { r: true } ]
 
+    it 'tracks removed drop index teleports', -> xf
+      op1: [ 0, [ 'a', { r: true } ], [ 'b', { p: 0 } ], [ 'c', { d: 0 } ] ]
+      op2: [ 0, { d: 0, p: 1 }, [ 0, { d: 1 } ], [ 'a', { p: 0 } ] ]
+      expect: [ 0, { r: true }, 0, 'b', { r: true } ]
+
     it 'handles transforming past cancelled move', -> xf
       op1: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
       op2: [ 0, { p: 0, d: 0 } ]
@@ -687,6 +692,7 @@ describe 'json1', ->
       op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 'y' } ] ]
       expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
       expectRight: null
+
 
 # ******* Compose *******
 
