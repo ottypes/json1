@@ -651,6 +651,25 @@ describe 'json1', ->
       op2: [ [ 0, { p: 0 } ], [ 3, { d: 0 } ] ]
       expect: [[0, d:0], [2, p:0], [3, r:true]]
 
+    it 'op2 moves into something op1 removes and op1 moves into that', -> xf
+      op1: [ [ 'a', { r: true }, 'aa', { p: 0 } ], [ 'b', 'x', { d: 0 } ] ]
+      op2: [ [ 'a', 'bb', { d: 0 } ], [ 'b', { p: 0 } ] ]
+      expect: [ 'a', { r: true }, 'aa', { r: true } ] # Also ok if we miss the second r.
+
+    it 'op2 moves into op1 remove edge cases', ->
+      # Sorry not minified.
+      xf
+        op1: [ 'Came', 0, [ 0, { r: true }, 'he', { p: 0 } ], [ 1, { d: 0 }, 0, { i: 'time' } ] ]
+        op2: [ 'Came', 0, [ 0, 'he', [ 0, { d: 0 } ], [ 1, { es: [] } ] ], [ 1, { p: 0 } ] ],
+        expectLeft: [ 'Came', 0, 0, { r: true, d: 0 }, [ 0, { i: 'time' } ], [ 'he', { p: 0 } ] ]
+        expectRight: [ 'Came', 0, 0, { r: true, d: 0 }, [ 1, { i: 'time' } ], [ 'he', { p: 0 } ] ]
+
+      xf
+        op1: [ [ 0, [ 1, { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
+        op2: [ 0, 1, { i: {}, p: 0 }, 'b', { d: 0 } ]
+        expectLeft: [ [ 0, [ 1, 'b', { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
+        expectRight: [ 0, 2, { r: true } ]
+
 
 # ******* Compose *******
 
