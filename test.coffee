@@ -653,6 +653,11 @@ describe 'json1', ->
       expectLeft: [ 1, [ 'burbled', { d: 0 } ], [ 'its', { r: true } ], [ 'thought', { p: 0 } ] ]
       expectRight: [ 1, 'its', { r: true } ]
 
+    it 'removed drop indexes tele to op1 pick', -> xf
+      op1: [ 'a', 0, [ 0, { es: [] } ], [ 2, { r: true } ] ]
+      op2: [ [ 'a', { p: 0 }, 0, 0, { p: 1 } ], [ 'b', { d: 0 }, 0, 1, 0, { d: 1 } ] ]
+      expect: [ 'b', 0, 1, { r: true }, 0, { r: true } ]
+
     it 'tracks removed drop index teleports', -> xf
       op1: [ 0, [ 'a', { r: true } ], [ 'b', { p: 0 } ], [ 'c', { d: 0 } ] ]
       op2: [ 0, { d: 0, p: 1 }, [ 0, { d: 1 } ], [ 'a', { p: 0 } ] ]
