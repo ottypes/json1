@@ -670,6 +670,11 @@ describe 'json1', ->
         expectLeft: [ [ 0, [ 1, 'b', { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
         expectRight: [ 0, 2, { r: true } ]
 
+    it 'translates indexes correctly in this fuzzer find', -> xf
+      op1: [ 0, { p: 0 }, 'x', { d: 0 } ]
+      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 'y' } ] ]
+      expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
+      expectRight: null
 
 # ******* Compose *******
 
