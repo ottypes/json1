@@ -641,6 +641,18 @@ describe 'json1', ->
       expectLeft: [ 'b', 0, { i: 'hi', r: true } ]
       expectRight: [ 'b', [ 0, { r: true } ], [ 1, { i: 'hi' } ] ]
 
+    it 'calculates removed drop indexes correctly', -> xf
+      op1: [ [ 0, { i: 'hi', p: 0 } ], [ 1, 1, { d: 0 } ], [ 2, { r: true } ] ]
+      op2: [ [ 0, { i: 'yo', p: 0 } ], [ 1, 1, { d: 0 } ] ]
+      expectLeft: [ [ 0, { i: 'hi' } ], [ 1, 1, { p: 0 } ], [ 2, { r: true }, 1, { d: 0 } ] ]
+      expectRight: [ [ 1, { i: 'hi' } ], [ 2, { r: true } ] ]
+
+    it 'removed drop indexes calc regression', -> xf
+      op1: [ [ 1, { p: 0 }, 'burbled', { d: 0 } ], [ 3, { r: true } ] ]
+      op2: [ [ 0, { i: 'to', r: true } ], [ 1, { p: 1 }, [ 'its', { d: 0 } ], [ 'thought', { d: 1 } ] ], [ 3, { p: 0 } ] ]
+      expectLeft: [ 1, [ 'burbled', { d: 0 } ], [ 'its', { r: true } ], [ 'thought', { p: 0 } ] ]
+      expectRight: [ 1, 'its', { r: true } ]
+
     it 'handles transforming past cancelled move', -> xf
       op1: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
       op2: [ 0, { p: 0, d: 0 } ]
