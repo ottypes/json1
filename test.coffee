@@ -698,6 +698,10 @@ describe 'json1', ->
       expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
       expectRight: null
 
+    it.skip 'buries children of blackholed values', -> xf
+      op1: [ [ 0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ], [ 'c', { d: 1 } ] ], [ 1, { p: 1 } ] ]
+      op2: [ 0, { p: 0 }, 'x', { d: 0 } ]
+      expect: [ 0, { r: true } ]
 
 # ******* Compose *******
 
