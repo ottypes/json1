@@ -7,14 +7,14 @@
     "ot-text": "^1.0.1"
   },
   "devDependencies": {
-    "mocha": "^2.3.3",
-    "ot-simple": "^1.0.0",
+    "coffee-script": "*",
+    "mocha": "^5.2.0",
     "ot-fuzzer": "^1.0.0",
-    "coffee-script": "*"
+    "ot-simple": "^1.0.0"
   },
   "scripts": {
-    "test": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks test.coffee",
-    "fuzzer": "mocha --compilers coffee:coffee-script/register --reporter spec --check-leaks fuzzer.coffee"
+    "test": "mocha --opts mocha.opts test.coffee",
+    "fuzzer": "mocha --opts mocha.opts fuzzer.coffee"
   },
   "repository": {
     "type": "git",
