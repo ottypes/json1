@@ -1886,3 +1886,11 @@ describe 'json1', ->
 
       expect: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
 
+    it 'compose copies op2 edit data', -> compose
+      op1: [ 'a', { r: true } ]
+      op2: [ [ 'x', { p: 0 } ], [ 'y', { d: 0 }, 'b', { es: [] } ] ]
+      expect: [
+        ['a', r:true]
+        ['x', {p:0}]
+        ['y', {d: 0}, 'b', {es: []}]
+      ]

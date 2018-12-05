@@ -9,7 +9,7 @@ const run = module.exports = () => {
 
   const _t = type.typeAllowingConflictsPred(() => true)
 
-  const tracer = require('./tracer')(_t, genOp)
+  // const tracer = require('./tracer')(_t, genOp)
   //fuzzer(tracer, tracer.genOp, 100000)
   fuzzer(_t, genOp, 100000)
 }
