@@ -53,56 +53,43 @@ rmConflict = (path...) -> {type:'remove', pick:path}
 editConflict = (path...) -> {type:'edit', drop:path}
 mvConflict = (from, to) -> {type:'move', pick:from, drop:to}
 
-xfConflict = ({op1, op2, conflict, expect, expectLeft, expectRight}) ->
-  if expect != undefined then expectLeft = expectRight = expect
+invConflict = ({type, c1, c2}) -> {type, c1:c2, c2:c1}
 
-  ecLeft = conflict
-  ecRight =
-    type: ecLeft.type
-    c1: ecLeft.c2
-    c2: ecLeft.c1
-
-  # We should see the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
-  for [side, op1_, op2_, ec] in [['left', op1, op2, ecLeft], ['right', op2, op1, ecRight]]
+otherSide = (side) -> if side == 'left' then 'right' else 'left'
+checkConflict = ({op1, op2, side, conflict, expect}) ->
+  # We should get the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
+  for [side_, op1_, op2_, ec] in [
+        [side, op1, op2, conflict],
+        [otherSide(side), op2, op1, invConflict(conflict)]
+      ]
     try
-      {ok, conflict} = type.tryTransform op1_, op2_, side
-      assert !ok, "Conflict erroneously succeeded (#{side})"
+      d -> log('tryTransform', side_, op1_, op2_)
+      {ok, conflict} = type.tryTransform op1_, op2_, side_
+      assert !ok, "Conflict erroneously succeeded (#{side_})"
       d -> log('conflict', conflict)
       assert.deepStrictEqual conflict, ec
     catch e
       d ->
         console.error 'FAIL! Repro with:'
-        console.log "tryTransform(#{JSON.stringify(op1_)}, #{JSON.stringify(op2_)}, '#{side}')"
-        type.tryTransform op1_, op2_, side
+        console.log "tryTransform(#{JSON.stringify(op1_)}, #{JSON.stringify(op2_)}, '#{side_}')"
+        type.tryTransform op1_, op2_, side_
       throw e
 
-  # In no conflict mode make sure we get the expected output. Note that we don't swap the ops here.
-  for [side, er, ec] in [['left', expectLeft, ecLeft], ['right', expectRight, ecRight]]
-    try
-      result = type.transformNoConflict op1, op2, side
-      assert.deepStrictEqual result, er
-    catch e
-      d ->
-        console.error 'FAIL! Repro with:'
-        console.log "transformNoConflict(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{side}')"
-        type.transformNoConflict op1, op2, side
-      throw e
-
-xf = (input) ->
-  return xfConflict input if input.conflict
-
-  {op1, op2, conflict, expect, expectLeft, expectRight} = input
+xf = ({op1, op2, conflict, conflictLeft, conflictRight, expect, expectLeft, expectRight}) ->
   if expect != undefined then expectLeft = expectRight = expect
+  if conflict != undefined then conflictLeft = conflictRight = conflict
 
-  for [side, e] in [['left', expectLeft], ['right', expectRight]]
+  for [side, e, c] in [['left', expectLeft, conflictLeft], ['right', expectRight, conflictRight]]
+    checkConflict {op1, op2, side, conflict: c, expect: e} if c
+
     try
-      result = transform op1, op2, side
+      result = if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
       assert.deepStrictEqual result, e
     catch e
       d ->
         console.error 'FAIL! Repro with:'
         console.log "transform(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{side}')"
-        transform op1, op2, side
+        if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
       throw e
 
 
@@ -1863,7 +1850,39 @@ describe 'json1', ->
       expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
       expectRight: null
 
-    it.skip 'buries children of blackholed values', -> xf
+    it 'buries children of blackholed values', -> xf
       op1: [ [ 0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ], [ 'c', { d: 1 } ] ], [ 1, { p: 1 } ] ]
       op2: [ 0, { p: 0 }, 'x', { d: 0 } ]
-      expect: [ 0, { r: true } ]
+      conflict:
+        type: BLACKHOLE
+        c1: mvConflict([1], [0, 'c'])
+        c2: mvConflict([0], [0, 'x'])
+      expect: [ 0, r: true, 'x', r:true ]
+
+    it 'does not conflict when removed target gets moved inside removed container', ->
+      # This edge case is interesting because we don't generate the same
+      # conflicts on left and right. We want our move of a.x to escape the
+      # object before removing it, but when we're right, the other operation's
+      # move holds the object and we get an unexpected rm conflict.
+      xf
+        op1: [ [ 'a', { r: true }, 'x', { p: 0 } ], [ 'b', { d: 0 } ] ]
+        op2: [ 'a', [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
+        conflictRight:
+          type: RM_UNEXPECTED_CONTENT
+          c1: rmConflict('a')
+          c2: mvConflict(['a', 'x'], ['a', 'y'])
+        expectLeft: [ [ 'a', { r: true }, 'y', { p: 0 } ], [ 'b', { d: 0 } ] ]
+        expectRight: [ 'a', { r: true }, 'y', {r:true}]
+
+      xf
+        op1: [ [ 'a', { r: true }, 1, { p: 0 } ], [ 'b', { d: 0 } ] ]
+        op2: [ 'a', [ 0, { d: 0 } ], [ 1, { p: 0 } ] ]
+        conflictRight:
+          type: RM_UNEXPECTED_CONTENT
+          c1: rmConflict('a')
+          c2: mvConflict(['a', 1], ['a', 0])
+        expectLeft: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
+        expectRight: [ 'a', { r: true }, 0, {r:true}]
+
+      expect: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
+
