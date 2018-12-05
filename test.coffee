@@ -46,7 +46,6 @@ compose = ({op1, op2, expect}) ->
 
 DROP_COLLISION = 'drop collision'
 RM_UNEXPECTED_CONTENT = 'remove unexpected content'
-RM_EMBEDDED_EDIT = 'remove embedded edit'
 BLACKHOLE = 'blackhole'
 
 insConflict = (path...) -> {type:'insert', drop:path}
@@ -795,7 +794,7 @@ describe 'json1', ->
         op1: ['x', r:true]
         op2: ['x', es:['hi']]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: rmConflict('x')
           c2: editConflict('x')
         expect: ['x', r:true]
@@ -1015,7 +1014,7 @@ describe 'json1', ->
         op1: ['x', es:['hi']]
         op2: ['x', r:true]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict('x')
           c2: rmConflict('x')
         expect: null
@@ -1024,7 +1023,7 @@ describe 'json1', ->
         op1: ['x', 'y', es:['hi']]
         op2: ['x', r:true]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict('x', 'y')
           c2: rmConflict('x')
         expect: null
@@ -1164,6 +1163,16 @@ describe 'json1', ->
         expectLeft: [1, i:'hi']
         expectRight: [2, i:'hi']
 
+      it 'errors if the inserts are at the root', -> xf
+        op1: [i:1]
+        op2: [i:2]
+        conflict:
+          type: DROP_COLLISION
+          c1: insConflict()
+          c2: insConflict()
+        expectLeft: [r:true, i:1]
+        expectRight: null
+
       it 'errors with insert vs drop', -> xf
         op1: ['x', i:'hi']
         op2: [['a', p:0], ['x', d:0]]
@@ -1206,7 +1215,7 @@ describe 'json1', ->
         op1: ['a', es:[]]
         op2: ['a', r:true]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict('a')
           c2: rmConflict('a')
         expect: null
@@ -1509,7 +1518,7 @@ describe 'json1', ->
         op1: [1, es:[2, 'hi']]
         op2: [1, r:"yo"]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict(1)
           c2: rmConflict(1)
         expect: null
@@ -1583,7 +1592,7 @@ describe 'json1', ->
         op1: [2, r:true, 1, es:['hi']]
         op2: [3, 1, r:true]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict(2, 1)
           c2: rmConflict(3, 1)
         expect: [2, r:true]
@@ -1592,7 +1601,7 @@ describe 'json1', ->
         op1: [[2, r:true, 1, es:['hi']], [3, 1, r:true]]
         op2: [3, 2, r:true]
         conflict:
-          type: RM_EMBEDDED_EDIT
+          type: RM_UNEXPECTED_CONTENT
           c1: editConflict(2, 1)
           c2: rmConflict(3, 2)
         expect: [[2, r:true], [3, 1, r:true]]
