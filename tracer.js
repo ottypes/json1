@@ -23,6 +23,8 @@ const printInfo = (item, prefix = '', depth = 5) => {
 }
 
 module.exports = (type, genOp) => ({
+  ...type,
+  
   create(data) { return type.create(data) },
 
   apply(snapshot, op) {

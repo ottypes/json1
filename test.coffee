@@ -13,7 +13,7 @@ log = require './lib/log'
 deepClone = require './lib/deepClone'
 
 apply = ({doc:snapshot, op, expect}) ->
-  type.debug = false
+  type.setDebug(false)
 
   orig = deepClone snapshot
   try
@@ -26,9 +26,9 @@ apply = ({doc:snapshot, op, expect}) ->
     throw e
 
 d = (fn) ->
-  type.debug = true
+  type.setDebug(true)
   fn()
-  type.debug = false
+  type.setDebug(false)
 
 compose = ({op1, op2, expect}) ->
   try
@@ -95,7 +95,7 @@ xf = ({op1, op2, conflict, conflictLeft, conflictRight, expect, expectLeft, expe
 
 
 diamond = ({doc, op1, op2}) ->
-  type.debug = false
+  type.setDebug(false)
 
   try
     # Test that the diamond property holds
@@ -129,8 +129,8 @@ diamond = ({doc, op1, op2}) ->
 describe 'json1', ->
   before ->
     type.registerSubtype require 'ot-simple'
-    type.debug = true
-  after -> type.debug = false
+    type.setDebug(true)
+  after -> type.setDebug(false)
 
   describe 'checkOp', ->
     pass = (op) ->
