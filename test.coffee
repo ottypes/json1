@@ -1877,11 +1877,11 @@ describe 'json1', ->
       xf
         op1: [ [ 'a', { r: true }, 1, { p: 0 } ], [ 'b', { d: 0 } ] ]
         op2: [ 'a', [ 0, { d: 0 } ], [ 1, { p: 0 } ] ]
+        expectLeft: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
         conflictRight:
           type: RM_UNEXPECTED_CONTENT
           c1: rmConflict('a')
           c2: mvConflict(['a', 1], ['a', 0])
-        expectLeft: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
         expectRight: [ 'a', { r: true }, 0, {r:true}]
 
       expect: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
@@ -1894,3 +1894,13 @@ describe 'json1', ->
         ['x', {p:0}]
         ['y', {d: 0}, 'b', {es: []}]
       ]
+
+    it 'does not conflict when the dest is salvaged', -> xf
+      op1: [ [ 'a', { p: 0 } ], [ 'b', { i: 'hi' } ], [ 'c', { d: 0 } ] ]
+      op2: [ [ 'a', { p: 0 } ], [ 'b', { d: 0 } ] ]
+      expectLeft: [['b', {p:0, i:'hi'}], ['c', d:0]]
+      conflictRight:
+        type: DROP_COLLISION
+        c1: insConflict('b')
+        c2: mvConflict(['a'], ['b'])
+      expectRight: null
