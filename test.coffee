@@ -25,53 +25,86 @@ apply = ({doc:snapshot, op, expect}) ->
     console.log "expected output: #{JSON.stringify(expect)}"
     throw e
 
+d = (fn) ->
+  type.debug = true
+  fn()
+  type.debug = false
 
 compose = ({op1, op2, expect}) ->
   try
     result = type.compose op1, op2
     assert.deepStrictEqual result, expect
   catch e
-    type.debug = true
-    console.error 'FAIL! Repro with:'
-    console.log "compose( #{JSON.stringify(op1)}, #{JSON.stringify(op2)} )"
-    console.log "expected output: #{JSON.stringify(expect)}"
-    #type.compose op1, op2
-    type.debug = false
+    d ->
+      console.error 'FAIL! Repro with:'
+      console.log "compose( #{JSON.stringify(op1)}, #{JSON.stringify(op2)} )"
+      console.log "expected output: #{JSON.stringify(expect)}"
+      type.compose op1, op2
     throw e
 
 
-printXFRepro = (op1, op2, direction, expect) ->
-  console.error 'FAIL! Repro with:'
-  console.log "transform(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{direction}')"
 
-xf = ({op1, op2, expect, expectLeft, expectRight, debug, lnf}) ->
+DROP_COLLISION = 'drop collision'
+RM_UNEXPECTED_CONTENT = 'remove unexpected content'
+BLACKHOLE = 'blackhole'
+
+insConflict = (path...) -> {type:'insert', drop:path}
+rmConflict = (path...) -> {type:'remove', pick:path}
+mvConflict = (from, to) -> {type:'move', pick:from, drop:to}
+
+xfConflict = ({op1, op2, conflict, expect, expectLeft, expectRight}) ->
   if expect != undefined then expectLeft = expectRight = expect
 
-  type.debug = !!debug
+  ecLeft = conflict
+  ecRight =
+    type: ecLeft.type
+    c1: ecLeft.c2
+    c2: ecLeft.c1
 
-  opts = {lnf}
+  # We should see the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
+  for [side, op1_, op2_, ec] in [['left', op1, op2, ecLeft], ['right', op2, op1, ecRight]]
+    try
+      {ok, conflict} = type.tryTransform op1_, op2_, side
+      assert !ok, "Conflict erroneously succeeded (#{side})"
+      d -> log('conflict', conflict)
+      assert.deepStrictEqual conflict, ec
+    catch e
+      d ->
+        console.error 'FAIL! Repro with:'
+        console.log "tryTransform(#{JSON.stringify(op1_)}, #{JSON.stringify(op2_)}, '#{side}')"
+        type.tryTransform op1_, op2_, side
+      throw e
 
-  try
-    #printXFRepro op1, op2, 'left', expectLeft
-    left = transform op1, op2, 'left', opts
-    assert.deepStrictEqual left, expectLeft
-  catch e
-    type.debug = true
-    printXFRepro op1, op2, 'left', expectLeft
-    transform op1, op2, 'left'
-    type.debug = false
-    throw e
+  # In no conflict mode make sure we get the expected output. Note that we don't swap the ops here.
+  for [side, er, ec] in [['left', expectLeft, ecLeft], ['right', expectRight, ecRight]]
+    try
+      result = type.transformNoConflict op1, op2, side
+      assert.deepStrictEqual result, er
+    catch e
+      d ->
+        console.error 'FAIL! Repro with:'
+        console.log "transformNoConflict(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{side}')"
+        type.transformNoConflict op1, op2, side
+      throw e
 
-  try
-    #printXFRepro op1, op2, 'right', expectRight
-    right = transform op1, op2, 'right', opts
-    assert.deepStrictEqual right, expectRight
-  catch e
-    type.debug = true
-    printXFRepro op1, op2, 'right', expectRight
-    transform op1, op2, 'right'
-    type.debug = false
-    throw e
+xf = (input) ->
+  return xfConflict input if input.conflict
+
+  {op1, op2, conflict, expect, expectLeft, expectRight} = input
+  if expect != undefined then expectLeft = expectRight = expect
+
+  for [side, e] in [['left', expectLeft], ['right', expectRight]]
+    try
+      result = transform op1, op2, side
+      assert.deepStrictEqual result, e
+    catch e
+      d ->
+        console.error 'FAIL! Repro with:'
+        console.log "transform(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{side}')"
+        transform op1, op2, side
+      throw e
+
+
 
 diamond = ({doc, op1, op2}) ->
   type.debug = false
@@ -102,6 +135,7 @@ diamond = ({doc, op1, op2}) ->
     log '----------'
     log doc12, '!=', doc21
     throw e
+
 
 
 describe 'json1', ->
@@ -396,313 +430,6 @@ describe 'json1', ->
       assert.throws -> type.apply [0, 'hi'], [1, p:0, 'x', d:0]
       assert.throws -> type.apply {}, [p:0, 'a', d:0]
 
-  describe 'fuzzer tests', ->
-    it 'asdf', -> apply
-      doc: { the: '', Twas: 'the' }
-      op: [ 'the', { es: [] } ]
-      expect: { the: '', Twas: 'the' }
-
-    it 'does not duplicate list items from edits', -> apply
-      doc: ['eyes']
-      op: [ 0, { es: [] } ]
-      expect: ['eyes']
-
-    it 'will edit the root document', -> apply
-      doc: ''
-      op: [es:[]]
-      expect: ''
-
-    # ------ These have nothing to do with apply. TODO: Move them out of this grouping.
-
-    it 'diamond', ->
-      # TODO: Do this for all combinations.
-      diamond
-        doc: Array.from 'abcde'
-        op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
-        op2: [ [ 0, { p: 0 } ], [ 4, { d: 0 } ] ]
-
-    it 'shuffles lists correctly', -> xf
-      op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
-      op2: [ [ 0, { p: 0 } ], [ 10, { d: 0 } ] ]
-      expectLeft: [ [ 1, { d: 0 } ], [ 10, { p: 0 } ] ]
-      expectRight: null
-
-    it 'inserts before edits', ->
-      xf
-        op1: [0, 'x', i:5]
-        op2: [0, i:35]
-        expect: [1, 'x', i:5]
-
-      xf
-        op1: [0, es:[]]
-        op2: [0, i:35]
-        expect: [1, es:[]]
-
-    it 'duplicates become noops in a list',
-      -> xf
-        op1: [0,{"p":0,"d":0}]
-        op2: [0,{"p":0,"d":0}]
-        expectLeft: [0,{"p":0,"d":0}] # This is a bit weird.
-        expectRight: null
-
-      -> xf
-        op1: [0, r:true, i:'a']
-        op2: [0, i:'b']
-        expectLeft: [[0, i:'a'], [1, r:true]]
-        expectRight: [1, r:true, i:'a']
-
-      -> xf
-        op1: [0, r:true, i:5]
-        op2: [0, r:true]
-        expect: [0, i:5]
-
-    it 'p1 pick descends correctly', ->
-      xf
-        op1: [2, r:true, 1, es:['hi']]
-        op2: [3, 1, r:true]
-        expect: [2, r:true]
-
-      xf
-        op1: [[2, r:true, 1, es:['hi']], [3, 1, r:true]]
-        op2: [3, 2, r:true]
-        expect: [[2, r:true], [3, 1, r:true]]
-
-    it 'transforms picks correctly', -> xf
-      op1: [1, 1, r:true]
-      op2: [0, p:0, d:0]
-      expect: [1, 1, r:true]
-
-    it 'pick & drop vs insert after the picked item', -> xf
-      op1: [0, p:0,d:0] # Remove / insert works the same.
-      op2: [1, i:"hi"]
-      expectLeft: [0, p:0,d:0]
-      expectRight: [[0, p:0], [1, d:0]]
-
-    it 'pick same item vs shuffle list', -> xf
-      op1: [1, ['x', p:0], ['y', d:0]]
-      op2: [1, {d:0}, 'x', {p:0}]
-      expectLeft: [1, p:0, 'y', d:0]
-      expectRight: null
-
-    it 'remove the same item in a list', -> xf
-      op1: [ 0, { r: true } ]
-      op2: [ 0, { r: true } ]
-      expect: null
-
-    it 'rm vs hold item', -> xf
-      op1: [ 0, { r: true } ]
-      op2: [ 0, { p: 0, d: 0 } ]
-      expect: [ 0, { r: true } ]
-
-    it 'moves child elements correctly', -> xf
-      doc: ['a', [0,10,20], 'c']
-      op1: [ 1, 0, { p: 0, d: 0 } ]
-      op2: [ [ 1, { d: 0 } ], [ 2, { p: 0 } ] ]
-      expect: [ 2, 0, { d:0, p:0 } ]
-
-    it 'moves list indexes', -> xf
-      doc: [[], 'b', 'c']
-      op1: [ [ 0, 'hi', { d: 0 } ], [ 1, { p: 0 } ] ]
-      op2: [ [ 0, { p: 0 } ], [ 20, { d: 0 } ] ]
-      expect: [[0, p:0], [19, 'hi', d:0]]
-
-    it 'insert empty string vs insert null', -> xf
-      doc: undefined
-      op1: [i:'hi']
-      op2: [i:null]
-      expectLeft: [r:true, i:'hi']
-      expectRight: null
-
-    it 'move vs emplace', -> xf
-      doc: ['a', 'b']
-      op1: [[0, p:0], [1, d:0]]
-      op2: [1, {p:0, d:0}]
-      expectLeft: [0, {p:0, d:0}]
-      expectRight: [[0, p:0], [1, d:0]]
-
-    it 'rm chases a subdocument that was moved out', -> xf
-      doc: [ [ 'aaa' ] ]
-      op1: [ 0, { r: true } ]
-      op2: [ 0, { d: 0 }, 0, { p: 0 } ] # Valid because lists.
-      expect: [[0, r:true], [1, r:true]]
-
-    it 'colliding drops', -> xf
-      doc: [ 'a', 'b', {} ]
-      op1: [ [ 0, { p: 0 } ], [ 1, 'x', { d: 0 } ] ] # -> ['b', x:'a']
-      op2: [ 1, { p: 0 }, 'x', { d: 0 } ] # -> ['a', x:'b']
-      expectLeft: [[0, p:0, 'x', d:0], [1, 'x', r:true]]
-      expectRight: [0, r:true]
-
-    it 'transform crash', -> xf
-      op1: [ [ 'the', { r: true, d: 0 } ], [ 'whiffling', { p: 0 } ] ]
-      op2: [ 'the', { p: 0, d: 0 } ]
-      expect: [ [ 'the', { d: 0, r: true } ], [ 'whiffling', { p: 0 } ] ]
-
-    it 'transforms drops when the parent is moved by a remove', -> xf
-      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
-      op2: ['a', 0, {r:1}]
-      expect: [['a', {p:0}], ['b', {d:0}, 0, {i:2}]]
-
-    it 'transforms drops when the parent is moved by a drop', -> xf
-      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
-      op2: ['a', 0, {i:1}]
-      expect: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
-
-    it 'transforms conflicting drops obfuscated by a move', -> xf
-      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
-      op2: ['a', 1, {i:1}]
-      expectLeft: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
-      expectRight: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
-
-    it 'transforms edits when the parent is moved', -> xf
-      op1: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
-      op2: [ 'x', { es: [ d: 1, 'Z' ] } ]
-      expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
-      expectRight: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
-
-    it 'xf lots', -> xf
-      op1: [['a', p:0], ['b', d:0, es:['hi']]]
-      op2: [['a', p:0], ['c', d:0]]
-      expectLeft: [['b', d:0, es:['hi']], ['c', p:0]]
-      expectRight: ['c', es:['hi']]
-
-    it 'inserts are moved back by the other op', -> xf
-      op1: [['a', p:0], ['b', d:0, 'x', i:'hi']]
-      op2: [['a', p:0], ['c', d:0]]
-      expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
-      expectRight: ['c', 'x', i:'hi']
-
-    it 'more awful edit moves', -> xf
-      op1: [['a', p:0], ['c', d:0, 'x', es:[]]]
-      op2: ['a', ['b', d:0], ['x', p:0]]
-      expect: [['a', p:0], ['c', d:0, 'b', es:[]]]
-
-    it 'inserts null', -> xf
-      op1: [ 'x', 'a', { i: null } ]
-      op2: [ [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
-      expect: [ 'y', 'a', { i: null } ]
-
-    it 'preserves local insert if both sides delete', -> xf
-      op1: [ { i: {}, r: true }, 'x', { i: 'yo' } ]
-      op2: [ { r: true } ]
-      expect: [ { i: {} }, 'x', { i: 'yo' } ]
-
-    it 'handles insert/delete vs move', -> xf
-      op1: [ 'a', { i: {}, r: true }, 'x', { i: 'yo' } ]
-      op2: [ [ 'a', { p: 0 } ], [ 'b', { d: 0 } ] ]
-      expect: [ [ 'a', { i: {} }, 'x', { i: 'yo' } ], [ 'b', { r: true }, ] ]
-
-    it 'insert pushes edit target', -> xf
-      op1: [[ 0, { i: "yo" } ], [ 1, 'a', { es: [] }]]
-      op2: [0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ]]
-      expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
-
-    it.skip 'composes simple regression', ->
-      # This currently emits 2 removes. Should be ok since it matches the
-      # appearance of the inverse.
-      compose
-        op1: [ 0, { p: 0, d: 0 } ]
-        op2: [ { r: true } ]
-        expect: [ { r: true } ]
-        # Currently: [ { r: true }, 0, { r: true } ]
-
-      compose
-        op1: [ 'a', 1, { r: true } ]
-        op2: [ 'a', { r: true } ]
-        expect: [ 'a', { r: true } ]
-        # Currently [ 'a', { r: true }, 1, { r: true } ]
-
-    it 'ignores op2 inserts for index position after op1 insert', -> xf
-      op1: [ { r:true, i: [] }, 0, { i: '' } ]
-      op2: [ 0, { i: 0 } ],
-      expect: [ { r: true, i: [] }, 0, { i: '' } ]
-
-    it 'edit moved inside a removed area should be removed', -> xf
-      op1: [[ 0, { r: true } ], [ 2, { es: [ ] } ]]
-      op2: [[ 0, 'x', { d: 0 } ], [ 3, { p: 0 } ]]
-      expect: [ 0, { r: true } ]
-
-    it 'advances indexes correctly with mixed numbers', -> xf
-      op1: [ [ 'x', [ 0, { p: 0 } ], [ 1, { d: 1 } ] ], [ 'y', { p: 1 } ], [ 'zzz', { d: 0 } ] ]
-      op2: [ [ 'x', 2, { i: 'hi' } ], [ 'y', { p: 0 } ], [ 'z', { d: 0 } ] ]
-      expectLeft: [ [ 'x', [ 0, { p: 1 } ], [ 1, { d: 0 } ] ], [ 'z', { p: 0 } ], [ 'zzz', { d: 1 } ] ]
-      expectRight: [ [ 'x', 0, { p: 0 } ], [ 'zzz', { d: 0 } ] ]
-
-    it 'handles index positions past cancelled drops 1', -> xf
-      op1: [ 0, { r: true, i: [ '' ] } ],
-      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 23 } ] ]
-      expectLeft: [ 0, { r: true, i: [ '' ] } ]
-      expectRight: [ [ 0, { r: true } ], [ 1, { i: [ '' ] } ] ]
-
-    it 'handles index positions past cancelled drops 2', -> xf
-      # This looks more complicated, but its a simpler version of the above test.
-      op1: [ [ 'a', { r: true } ], [ 'b', 0, { i: 'hi' } ] ]
-      op2: [ [ 'a', { p: 0 } ], [ 'b', [ 0, { d: 0 } ], [ 1, { i: 'yo' } ] ] ]
-      expectLeft: [ 'b', 0, { i: 'hi', r: true } ]
-      expectRight: [ 'b', [ 0, { r: true } ], [ 1, { i: 'hi' } ] ]
-
-    it 'calculates removed drop indexes correctly', -> xf
-      op1: [ [ 0, { i: 'hi', p: 0 } ], [ 1, 1, { d: 0 } ], [ 2, { r: true } ] ]
-      op2: [ [ 0, { i: 'yo', p: 0 } ], [ 1, 1, { d: 0 } ] ]
-      expectLeft: [ [ 0, { i: 'hi' } ], [ 1, 1, { p: 0 } ], [ 2, { r: true }, 1, { d: 0 } ] ]
-      expectRight: [ [ 1, { i: 'hi' } ], [ 2, { r: true } ] ]
-
-    it 'removed drop indexes calc regression', -> xf
-      op1: [ [ 1, { p: 0 }, 'burbled', { d: 0 } ], [ 3, { r: true } ] ]
-      op2: [ [ 0, { i: 'to', r: true } ], [ 1, { p: 1 }, [ 'its', { d: 0 } ], [ 'thought', { d: 1 } ] ], [ 3, { p: 0 } ] ]
-      expectLeft: [ 1, [ 'burbled', { d: 0 } ], [ 'its', { r: true } ], [ 'thought', { p: 0 } ] ]
-      expectRight: [ 1, 'its', { r: true } ]
-
-    it 'removed drop indexes tele to op1 pick', -> xf
-      op1: [ 'a', 0, [ 0, { es: [] } ], [ 2, { r: true } ] ]
-      op2: [ [ 'a', { p: 0 }, 0, 0, { p: 1 } ], [ 'b', { d: 0 }, 0, 1, 0, { d: 1 } ] ]
-      expect: [ 'b', 0, 1, { r: true }, 0, { r: true } ]
-
-    it 'tracks removed drop index teleports', -> xf
-      op1: [ 0, [ 'a', { r: true } ], [ 'b', { p: 0 } ], [ 'c', { d: 0 } ] ]
-      op2: [ 0, { d: 0, p: 1 }, [ 0, { d: 1 } ], [ 'a', { p: 0 } ] ]
-      expect: [ 0, { r: true }, 0, 'b', { r: true } ]
-
-    it 'handles transforming past cancelled move', -> xf
-      op1: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
-      op2: [ 0, { p: 0, d: 0 } ]
-      expect: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
-
-    it 'correctly adjusts indexes in another fuzzer great', -> xf
-      op1: [ [ 0, { d: 0, r: true } ], [ 3, { p: 0 } ] ]
-      op2: [ [ 0, { p: 0 } ], [ 3, { d: 0 } ] ]
-      expect: [[0, d:0], [2, p:0], [3, r:true]]
-
-    it 'op2 moves into something op1 removes and op1 moves into that', -> xf
-      op1: [ [ 'a', { r: true }, 'aa', { p: 0 } ], [ 'b', 'x', { d: 0 } ] ]
-      op2: [ [ 'a', 'bb', { d: 0 } ], [ 'b', { p: 0 } ] ]
-      expect: [ 'a', { r: true }, 'aa', { r: true } ] # Also ok if we miss the second r.
-
-    it 'op2 moves into op1 remove edge cases', ->
-      # Sorry not minified.
-      xf
-        op1: [ 'Came', 0, [ 0, { r: true }, 'he', { p: 0 } ], [ 1, { d: 0 }, 0, { i: 'time' } ] ]
-        op2: [ 'Came', 0, [ 0, 'he', [ 0, { d: 0 } ], [ 1, { es: [] } ] ], [ 1, { p: 0 } ] ],
-        expectLeft: [ 'Came', 0, 0, { r: true, d: 0 }, [ 0, { i: 'time' } ], [ 'he', { p: 0 } ] ]
-        expectRight: [ 'Came', 0, 0, { r: true, d: 0 }, [ 1, { i: 'time' } ], [ 'he', { p: 0 } ] ]
-
-      xf
-        op1: [ [ 0, [ 1, { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
-        op2: [ 0, 1, { i: {}, p: 0 }, 'b', { d: 0 } ]
-        expectLeft: [ [ 0, [ 1, 'b', { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
-        expectRight: [ 0, 2, { r: true } ]
-
-    it 'translates indexes correctly in this fuzzer find', -> xf
-      op1: [ 0, { p: 0 }, 'x', { d: 0 } ]
-      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 'y' } ] ]
-      expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
-      expectRight: null
-
-    it.skip 'buries children of blackholed values', -> xf
-      op1: [ [ 0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ], [ 'c', { d: 1 } ] ], [ 1, { p: 1 } ] ]
-      op2: [ 0, { p: 0 }, 'x', { d: 0 } ]
-      expect: [ 0, { r: true } ]
-
 # ******* Compose *******
 
   describe 'compose', ->
@@ -969,6 +696,7 @@ describe 'json1', ->
       it 'vs pick', -> xf
         op1: [['x', p:0], ['z', d:0]]
         op2: [['x', p:0], ['y', d:0]]
+        # Consider adding a conflict for this case.
         expectLeft: [['y', p:0], ['z', d:0]]
         expectRight: null
       it 'vs pick parent', -> xf
@@ -1065,7 +793,11 @@ describe 'json1', ->
         it 'move in', -> xf
           op1: ['x', r:true]
           op2: [['a', p:0], ['x', 'y', d:0]]
-          expect: ['x', r:true]
+          conflict:
+            type: RM_UNEXPECTED_CONTENT
+            c1: rmConflict('x')
+            c2: mvConflict(['a'], ['x', 'y'])
+          expect: ['x', r:true, 'y', r:true] # Also ok if its just x, r:true
 
         it 'move across', -> xf
           op1: ['x', r:true] # delete doc.x
@@ -1082,10 +814,14 @@ describe 'json1', ->
           op2: [['x', 'y', p:0, 'z', p:1], ['y', d:0], ['z', d:1]]
           expect: [['x', r:true], ['y', r:true], ['z', r:true]]
 
-        it 'chain out', -> xf # Not sure if this is a useful test
+        it 'chain out', -> xf
           op1: ['x', r:true]
           op2: [['x', 'y', p:0], ['y', p:1], ['z', d:0, 'a', d:1]]
-          expect: [['x', r:true], ['z', r:true]]
+          conflict:
+            type: RM_UNEXPECTED_CONTENT
+            c1: rmConflict('x')
+            c2: mvConflict(['y'], ['z', 'a'])
+          expect: [['x', r:true], ['z', r:true, 'a', r:true]]
 
         it 'mess', -> xf
           # yeesh
@@ -1102,11 +838,20 @@ describe 'json1', ->
       it 'vs delete parent', -> xf
         op1: [['x', p:0], ['y', 'a', d:0]]
         op2: ['y', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: mvConflict(['x'], ['y', 'a'])
+          c2: rmConflict('y')
         expect: ['x', r:true]
 
       it 'vs a cancelled parent', -> xf
+        # This is actually a really complicated case.
         op1: [['x', 'y', p:0], ['y', p:1], ['z', d:0, 'a', d:1]]
         op2: ['x', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: mvConflict(['y'], ['z', 'a'])
+          c2: rmConflict('x')
         expect: ['y', r:true]
 
       it 'vs pick parent', -> xf
@@ -1117,6 +862,10 @@ describe 'json1', ->
       it 'vs drop', -> xf
         op1: [['x', p:0], ['z', d:0]]
         op2: [['y', p:0], ['z', d:0]]
+        conflict:
+          type: DROP_COLLISION
+          c1: mvConflict(['x'], ['z'])
+          c2: mvConflict(['y'], ['z'])
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
 
@@ -1129,12 +878,20 @@ describe 'json1', ->
       it 'vs drop (chained)', -> xf
         op1: [['a', p:1], ['x', p:0], ['z', d:0, 'a', d:1]]
         op2: [['y', p:0], ['z', d:0]]
-        expectLeft: [['a', p:1], ['x', p:0], ['z', r:true, d:0, 'a', d:1]]
+        conflict:
+          type: DROP_COLLISION
+          c1: mvConflict(['x'], ['z'])
+          c2: mvConflict(['y'], ['z'])
+        expectLeft: [['a', p:0], ['x', p:1], ['z', r:true, d:1, 'a', d:0]]
         expectRight: [['a', r:true], ['x', r:true]]
 
       it 'vs insert', -> xf
         op1: [['x', p:0], ['z', d:0]]
         op2: ['z', i:5]
+        conflict:
+          type: DROP_COLLISION
+          c1: mvConflict(['x'], ['z'])
+          c2: insConflict('z')
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
 
@@ -1172,6 +929,10 @@ describe 'json1', ->
       it 'vs delete parent', -> xf
         op1: ['y', 'a', i:5]
         op2: ['y', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict('y', 'a')
+          c2: rmConflict('y')
         expect: null
 
       it 'vs pick parent', -> xf
@@ -1182,12 +943,20 @@ describe 'json1', ->
       it 'vs drop', -> xf
         op1: ['z', i:5]
         op2: [['y', p:0], ['z', d:0]]
+        conflict:
+          type: DROP_COLLISION
+          c1: insConflict('z')
+          c2: mvConflict(['y'], ['z'])
         expectLeft: ['z', r:true, i:5]
         expectRight: null
 
       it 'vs insert', -> xf
         op1: ['z', i:5]
         op2: ['z', i:10]
+        conflict:
+          type: DROP_COLLISION
+          c1: insConflict('z')
+          c2: insConflict('z')
         expectLeft: ['z', r:true, i:5]
         expectRight: null
 
@@ -1222,6 +991,10 @@ describe 'json1', ->
         xf
           op1: ['x', i:{}, 'y', i:5]
           op2: ['x', i:{}, 'y', i:6]
+          conflict:
+            type: DROP_COLLISION
+            c1: insConflict('x', 'y')
+            c2: insConflict('x', 'y')
           expectLeft: ['x', 'y', r:true, i:5]
           expectRight: null
 
@@ -1263,12 +1036,20 @@ describe 'json1', ->
       it 'and insert', -> xf
         op1: ['x', r:true]
         op2: [['x', 'a', p:0], ['y', d:0, 'b', i:5]]
-        expect: [['x', r:true], ['y', r:true]]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: rmConflict('x')
+          c2: insConflict('y', 'b')
+        expect: [['x', r:true], ['y', r:true, 'b', r:true]]
 
-      it 'and another move', -> xf
-        op2: [['q', p:1], ['x', 'a', p:0], ['y', d:0, 'b', d:1]]
+      it 'and another move (rm x vs x.a -> y, q -> y.b)', -> xf
         op1: ['x', r:true]
-        expect: [['x', r:true], ['y', r:true]]
+        op2: [['q', p:1], ['x', 'a', p:0], ['y', d:0, 'b', d:1]]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: rmConflict('x')
+          c2: mvConflict(['q'], ['y', 'b'])
+        expect: [['x', r:true], ['y', r:true, 'b', r:true]]
 
     describe 'op2 list move an op1 drop', ->
       it 'vs op1 remove', -> xf
@@ -1305,34 +1086,154 @@ describe 'json1', ->
         it 'transforms by p2 picks'
         it 'transforms by p2 drops'
 
+  describe 'conflicts', ->
+    describe 'drop into remove / rm unexpected', ->
+      # xfConflict does both xf(op1, op2, left) and xf(op2, op1, right), and
+      # uses invConflict. So this also tests RM_UNEXPECTED_CONTENT with each
+      # test case.
+      it 'errors if you insert', -> xf
+        op1: ['a', 'b', i:5]
+        op2: ['a', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict('a', 'b')
+          c2: rmConflict('a')
+        expect: null
+
+      it 'errors if you drop', -> xf
+        op1: [['a', p:0], ['x', 'b', d:0]]
+        op2: ['x', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: mvConflict(['a'], ['x', 'b'])
+          c2: rmConflict('x')
+        expect: ['a', r:true]
+
+      it 'errors if you rm then insert in a child', -> xf
+        op1: ['a', 'b', r:true, i:5]
+        op2: ['a', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict('a', 'b')
+          c2: rmConflict('a')
+        expect: null
+
+      it 'errors if the object is replaced', ->
+        op1: ['a', 'b', i:5]
+        op2: ['a', r:true, i:10]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict('a', 'b')
+          c2: rmConflict('a')
+        expect: null
+
+    describe 'overlapping drop', ->
+      it 'errors if two ops insert different content into the same place in an object', -> xf
+        op1: ['x', i:'hi']
+        op2: ['x', i:'yo']
+        conflict:
+          type: DROP_COLLISION
+          c1: insConflict('x')
+          c2: insConflict('x')
+        expectLeft: ['x', r:true, i:'hi']
+        expectRight: null
+
+      it 'does not conflict if inserts are identical', -> xf
+        op1: ['x', i:'hi']
+        op2: ['x', i:'hi']
+        expectLeft: null
+        expectRight: null
+
+      it 'does not conflict if inserts are into a list', -> xf
+        op1: [1, i:'hi']
+        op2: [1, i:'yo']
+        expectLeft: [1, i:'hi']
+        expectRight: [2, i:'hi']
+
+      it 'errors with insert vs drop', -> xf
+        op1: ['x', i:'hi']
+        op2: [['a', p:0], ['x', d:0]]
+        # ????
+        conflict:
+          type: DROP_COLLISION
+          c1: insConflict('x')
+          c2: mvConflict(['a'], ['x'])
+        expectLeft: ['x', r:true, i:'hi']
+        expectRight: null
+
+      it 'errors with drop vs insert', -> xf
+        op1: [['a', p:0], ['x', d:0]]
+        op2: ['x', i:'hi']
+        conflict:
+          type: DROP_COLLISION
+          c1: mvConflict(['a'], ['x'])
+          c2: insConflict('x')
+        expectLeft: [['a', p:0], ['x', r:true, d:0]]
+        expectRight: ['a', r:true]
+
+      it 'errors with drop vs drop', -> xf
+        op1: [['a', p:0], ['x', d:0]]
+        op2: [['b', p:0], ['x', d:0]]
+        conflict:
+          type: DROP_COLLISION
+          c1: mvConflict(['a'], ['x'])
+          c2: mvConflict(['b'], ['x'])
+        expectLeft: [['a', p:0], ['x', r:true, d:0]]
+        expectRight: ['a', r:true]
+
+
+      it 'works ok if the two operations make identical moves', -> xf
+        op1: [['a', p:0], ['x', d:0]]
+        op2: [['a', p:0], ['x', d:0]]
+        expect: null # ??? Also ok for left: ['x', p:0, d:0]
+
     describe 'blackhole', ->
-      it 'works with objects blackholed', -> xf
+      it 'detects and errors', -> xf
         op1: [['x', p:0], ['y', 'a', d:0]]
         op2: [['x', 'a', d:0], ['y', p:0]]
-        expect: ['x', r:true]
+        conflict:
+          type: BLACKHOLE
+          c1: mvConflict(['x'], ['y', 'a'])
+          c2: mvConflict(['y'], ['x', 'a'])
+        expect: ['x', r:true, 'a', r:true] # Also equivalent: ['x', r:true]
 
       it 'blackhole logic does not apply when op2 removes parent', -> xf
         # TODO: Although you wouldn't know it, since this result is very similar.
         op1: [['x', p:0], ['y', 'xx', 'a', d:0]]
         op2: [['x', 'a', d:0], ['y', p:0, 'xx', r:true]]
-        expect: ['x', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: mvConflict(['x'], ['y', 'xx', 'a'])
+          c2: rmConflict('y', 'xx')
+        expect: ['x', r:true, 'a', r:true] # Also ok: ['x', r:true]
 
       it 'blackhole logic still applies when op2 inserts', -> xf
         op1: [['x', p:0], ['y', 'a', i:{}, 'b', d:0]]
         op2: [['x', 'a', i:{}, 'b', d:0], ['y', p:0]]
-        expect: ['x', r:true]
+        conflict:
+          type: BLACKHOLE
+          c1: mvConflict(['x'], ['y', 'a', 'b'])
+          c2: mvConflict(['y'], ['x', 'a', 'b'])
+        expect: ['x', r:true, 'a', r:true, 'b', r:true]
 
       it 'blackholes items in lists correctly', -> xf
         op1: [1, p:0, 'a', d:0]
         op2: [[1, 'b', d:0], [2, p:0]]
-        expect: [1, r:true]
+        conflict:
+          type: BLACKHOLE
+          c1: mvConflict([1], [1, 'a'])
+          c2: mvConflict([2], [1, 'b'])
+        expect: [1, r:true, 'b', r:true]
 
-      it.skip 'moves blackholed items into lnf', ->
-        xf
-          op1: [['x', p:0], ['y', 'a', d:0]]
-          op2: [['x', 'a', d:0], ['y', p:0]]
-          lnf: ['lnf']
-          expect: [['lnf', [0, d:0], [1, d:1]], ['x', p:0], ['y', p:1]]
+      it 'blackholes items despite scrambled pick and drop slots', -> xf
+        op1: [ [ 'a', { p: 1, d: 1 } ], [ 'x', { p: 0 } ], [ 'y', 'a', { d: 0 } ] ]
+        op2: [ [ 'x', 'a', { d: 0 } ], [ 'y', { p: 0 } ] ]
+        conflict:
+          type: BLACKHOLE
+          c1: mvConflict(['x'], ['y', 'a'])
+          c2: mvConflict(['y'], ['x', 'a'])
+        expect: [['a', p:0, d:0], ['x', r:true, 'a', r:true]]
+
 
 
   describe 'transform-old', ->
@@ -1509,6 +1410,10 @@ describe 'json1', ->
       it 'insert vs delete parent', -> xf
         op1: [2, 'x', i:'hi']
         op2: [2, r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict(2, 'x')
+          c2: rmConflict(2)
         expect: null
 
       it 'transforms against inserts in my own list', ->
@@ -1574,3 +1479,337 @@ describe 'json1', ->
 
       # TODO Numbers
 
+
+# ***** Test cases found by the fuzzer which have caused issues
+  describe 'fuzzer tests', ->
+    it 'asdf', -> apply
+      doc: { the: '', Twas: 'the' }
+      op: [ 'the', { es: [] } ]
+      expect: { the: '', Twas: 'the' }
+
+    it 'does not duplicate list items from edits', -> apply
+      doc: ['eyes']
+      op: [ 0, { es: [] } ]
+      expect: ['eyes']
+
+    it 'will edit the root document', -> apply
+      doc: ''
+      op: [es:[]]
+      expect: ''
+
+    # ------ These have nothing to do with apply. TODO: Move them out of this grouping.
+
+    it 'diamond', ->
+      # TODO: Do this for all combinations.
+      diamond
+        doc: Array.from 'abcde'
+        op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
+        op2: [ [ 0, { p: 0 } ], [ 4, { d: 0 } ] ]
+
+    it 'shuffles lists correctly', -> xf
+      op1: [ [ 0, { p: 0 } ], [ 1, { d: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 10, { d: 0 } ] ]
+      expectLeft: [ [ 1, { d: 0 } ], [ 10, { p: 0 } ] ]
+      expectRight: null
+
+    it 'inserts before edits', ->
+      xf
+        op1: [0, 'x', i:5]
+        op2: [0, i:35]
+        expect: [1, 'x', i:5]
+
+      xf
+        op1: [0, es:[]]
+        op2: [0, i:35]
+        expect: [1, es:[]]
+
+    it 'duplicates become noops in a list',
+      -> xf
+        op1: [0,{"p":0,"d":0}]
+        op2: [0,{"p":0,"d":0}]
+        expectLeft: [0,{"p":0,"d":0}] # This is a bit weird.
+        expectRight: null
+
+      -> xf
+        op1: [0, r:true, i:'a']
+        op2: [0, i:'b']
+        expectLeft: [[0, i:'a'], [1, r:true]]
+        expectRight: [1, r:true, i:'a']
+
+      -> xf
+        op1: [0, r:true, i:5]
+        op2: [0, r:true]
+        expect: [0, i:5]
+
+    it 'p1 pick descends correctly', ->
+      xf
+        op1: [2, r:true, 1, es:['hi']]
+        op2: [3, 1, r:true]
+        expect: [2, r:true]
+
+      xf
+        op1: [[2, r:true, 1, es:['hi']], [3, 1, r:true]]
+        op2: [3, 2, r:true]
+        expect: [[2, r:true], [3, 1, r:true]]
+
+    it 'transforms picks correctly', -> xf
+      op1: [1, 1, r:true]
+      op2: [0, p:0, d:0]
+      expect: [1, 1, r:true]
+
+    it 'pick & drop vs insert after the picked item', -> xf
+      op1: [0, p:0,d:0] # Remove / insert works the same.
+      op2: [1, i:"hi"]
+      expectLeft: [0, p:0,d:0]
+      expectRight: [[0, p:0], [1, d:0]]
+
+    it 'pick same item vs shuffle list', -> xf
+      op1: [1, ['x', p:0], ['y', d:0]]
+      op2: [1, {d:0}, 'x', {p:0}]
+      expectLeft: [1, p:0, 'y', d:0]
+      expectRight: null
+
+    it 'remove the same item in a list', -> xf
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { r: true } ]
+      expect: null
+
+    it 'rm vs hold item', -> xf
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { p: 0, d: 0 } ]
+      expect: [ 0, { r: true } ]
+
+    it 'moves child elements correctly', -> xf
+      doc: ['a', [0,10,20], 'c']
+      op1: [ 1, 0, { p: 0, d: 0 } ]
+      op2: [ [ 1, { d: 0 } ], [ 2, { p: 0 } ] ]
+      expect: [ 2, 0, { d:0, p:0 } ]
+
+    it 'moves list indexes', -> xf
+      doc: [[], 'b', 'c']
+      op1: [ [ 0, 'hi', { d: 0 } ], [ 1, { p: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 20, { d: 0 } ] ]
+      expect: [[0, p:0], [19, 'hi', d:0]]
+
+    it 'insert empty string vs insert null', -> xf
+      doc: undefined
+      op1: [i:'hi']
+      op2: [i:null]
+      conflict:
+        type: DROP_COLLISION
+        c1: insConflict()
+        c2: insConflict()
+      expectLeft: [r:true, i:'hi']
+      expectRight: null
+
+    it 'move vs emplace', -> xf
+      doc: ['a', 'b']
+      op1: [[0, p:0], [1, d:0]]
+      op2: [1, {p:0, d:0}]
+      expectLeft: [0, {p:0, d:0}]
+      expectRight: [[0, p:0], [1, d:0]]
+
+    it 'rm chases a subdocument that was moved out', -> xf
+      doc: [ [ 'aaa' ] ]
+      op1: [ 0, { r: true } ]
+      op2: [ 0, { d: 0 }, 0, { p: 0 } ] # Valid because lists.
+      expect: [[0, r:true], [1, r:true]]
+
+    it 'colliding drops', -> xf
+      doc: [ 'a', 'b', {} ]
+      op1: [[0, p:0], [1, 'x', d:0]] # -> ['b', x:'a']
+      op2: [1, p:0, 'x', d:0] # -> ['a', x:'b']
+      conflict:
+        type: DROP_COLLISION
+        c1: mvConflict([0], [1, 'x'])
+        c2: mvConflict([1], [1, 'x'])
+      expectLeft: [[0, p:0, 'x', d:0], [1, 'x', r:true]]
+      expectRight: [0, r:true]
+
+    it 'transform crash', -> xf
+      op1: [ [ 'the', { r: true, d: 0 } ], [ 'whiffling', { p: 0 } ] ]
+      op2: [ 'the', { p: 0, d: 0 } ]
+      expect: [ [ 'the', { d: 0, r: true } ], [ 'whiffling', { p: 0 } ] ]
+
+    it 'transforms drops when the parent is moved by a remove', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 0, {r:1}]
+      expect: [['a', {p:0}], ['b', {d:0}, 0, {i:2}]]
+
+    it 'transforms drops when the parent is moved by a drop', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 0, {i:1}]
+      expect: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
+
+    it 'transforms conflicting drops obfuscated by a move', -> xf
+      op1: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      op2: ['a', 1, {i:1}]
+      expectLeft: [['a', {p:0}], ['b', {d:0}, 1, {i:2}]]
+      expectRight: [['a', {p:0}], ['b', {d:0}, 2, {i:2}]]
+
+    it 'transforms edits when the parent is moved', -> xf
+      op1: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
+      op2: [ 'x', { es: [ d: 1, 'Z' ] } ]
+      expectLeft: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 'xxx' ] } ] ]
+      expectRight: [ [ 'x', { p: 0 } ], [ 'y', { d: 0, es: [ 1, 'xxx' ] } ] ]
+
+    it 'xf lots', -> xf
+      op1: [['a', p:0], ['b', d:0, es:['hi']]]
+      op2: [['a', p:0], ['c', d:0]]
+      expectLeft: [['b', d:0, es:['hi']], ['c', p:0]]
+      expectRight: ['c', es:['hi']]
+
+    it 'inserts are moved back by the other op', -> xf
+      op1: [['a', p:0], ['b', d:0, 'x', i:'hi']]
+      op2: [['a', p:0], ['c', d:0]]
+      expectLeft: [['b', d:0, 'x', i:'hi'], ['c', p:0]]
+      expectRight: ['c', 'x', i:'hi']
+
+    it 'more awful edit moves', -> xf
+      op1: [['a', p:0], ['c', d:0, 'x', es:[]]]
+      op2: ['a', ['b', d:0], ['x', p:0]]
+      expect: [['a', p:0], ['c', d:0, 'b', es:[]]]
+
+    it 'inserts null', -> xf
+      op1: [ 'x', 'a', { i: null } ]
+      op2: [ [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
+      expect: [ 'y', 'a', { i: null } ]
+
+    it 'preserves local insert if both sides delete', -> xf
+      op1: [ { i: {}, r: true }, 'x', { i: 'yo' } ]
+      op2: [ { r: true } ]
+      expect: [ { i: {} }, 'x', { i: 'yo' } ]
+
+    it 'handles insert/delete vs move', -> xf
+      op1: [ 'a', { i: {}, r: true }, 'x', { i: 'yo' } ]
+      op2: [ [ 'a', { p: 0 } ], [ 'b', { d: 0 } ] ]
+      expect: [ [ 'a', { i: {} }, 'x', { i: 'yo' } ], [ 'b', { r: true }, ] ]
+
+    it 'insert pushes edit target', -> xf
+      op1: [[ 0, { i: "yo" } ], [ 1, 'a', { es: [] }]]
+      op2: [0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ]]
+      expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
+
+    it 'composes simple regression', ->
+      compose
+        op1: [ 0, { p: 0, d: 0 } ]
+        op2: [ { r: true } ]
+        expect: [ { r: true }, 0, { r: true } ]
+
+      compose
+        op1: [ 'a', 1, { r: true } ]
+        op2: [ 'a', { r: true } ]
+        expect: [ 'a', { r: true }, 1, { r: true } ]
+
+    it 'ignores op2 inserts for index position after op1 insert', -> xf
+      op1: [ { r:true, i: [] }, 0, { i: '' } ]
+      op2: [ 0, { i: 0 } ],
+      conflict:
+        type: RM_UNEXPECTED_CONTENT
+        c1: rmConflict()
+        c2: insConflict(0)
+      expect: [ { r: true, i: [] }, 0, { r:true, i: '' } ]
+
+    it 'edit moved inside a removed area should be removed', -> xf
+      op1: [[ 0, { r: true } ], [ 2, { es: [ ] } ]]
+      op2: [[ 0, 'x', { d: 0 } ], [ 3, { p: 0 } ]]
+      conflict:
+        type: RM_UNEXPECTED_CONTENT
+        c1: rmConflict(0)
+        c2: mvConflict([3], [0, 'x'])
+      expect: [ 0, { r: true }, 'x', {r:true} ]
+
+    it 'advances indexes correctly with mixed numbers', -> xf
+      op1: [ [ 'x', [ 0, { p: 0 } ], [ 1, { d: 1 } ] ], [ 'y', { p: 1 } ], [ 'zzz', { d: 0 } ] ]
+      op2: [ [ 'x', 2, { i: 'hi' } ], [ 'y', { p: 0 } ], [ 'z', { d: 0 } ] ]
+      expectLeft: [ [ 'x', [ 0, { p: 1 } ], [ 1, { d: 0 } ] ], [ 'z', { p: 0 } ], [ 'zzz', { d: 1 } ] ]
+      expectRight: [ [ 'x', 0, { p: 0 } ], [ 'zzz', { d: 0 } ] ]
+
+    it 'handles index positions past cancelled drops 1', -> xf
+      op1: [ 0, { r: true, i: [ '' ] } ],
+      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 23 } ] ]
+      expectLeft: [ 0, { r: true, i: [ '' ] } ]
+      expectRight: [ [ 0, { r: true } ], [ 1, { i: [ '' ] } ] ]
+
+    it 'handles index positions past cancelled drops 2', -> xf
+      # This looks more complicated, but its a simpler version of the above test.
+      op1: [ [ 'a', { r: true } ], [ 'b', 0, { i: 'hi' } ] ]
+      op2: [ [ 'a', { p: 0 } ], [ 'b', [ 0, { d: 0 } ], [ 1, { i: 'yo' } ] ] ]
+      expectLeft: [ 'b', 0, { i: 'hi', r: true } ]
+      expectRight: [ 'b', [ 0, { r: true } ], [ 1, { i: 'hi' } ] ]
+
+    it 'calculates removed drop indexes correctly', -> xf
+      op1: [ [ 0, { i: 'hi', p: 0 } ], [ 1, 1, { d: 0 } ], [ 2, { r: true } ] ]
+      op2: [ [ 0, { i: 'yo', p: 0 } ], [ 1, 1, { d: 0 } ] ]
+      expectLeft: [ [ 0, { i: 'hi' } ], [ 1, 1, { p: 0 } ], [ 2, { r: true }, 1, { d: 0 } ] ]
+      expectRight: [ [ 1, { i: 'hi' } ], [ 2, { r: true } ] ]
+
+    it 'removed drop indexes calc regression', -> xf
+      op1: [ [ 1, { p: 0 }, 'burbled', { d: 0 } ], [ 3, { r: true } ] ]
+      op2: [ [ 0, { i: 'to', r: true } ], [ 1, { p: 1 }, [ 'its', { d: 0 } ], [ 'thought', { d: 1 } ] ], [ 3, { p: 0 } ] ]
+      expectLeft: [ 1, [ 'burbled', { d: 0 } ], [ 'its', { r: true } ], [ 'thought', { p: 0 } ] ]
+      expectRight: [ 1, 'its', { r: true } ]
+
+    it 'removed drop indexes tele to op1 pick', -> xf
+      op1: [ 'a', 0, [ 0, { es: [] } ], [ 2, { r: true } ] ]
+      op2: [ [ 'a', { p: 0 }, 0, 0, { p: 1 } ], [ 'b', { d: 0 }, 0, 1, 0, { d: 1 } ] ]
+      conflict:
+        type: RM_UNEXPECTED_CONTENT
+        c1: rmConflict('a', 0, 2)
+        c2: mvConflict(['a', 0, 0], ['b', 0, 1, 0])
+      expect: [ 'b', 0, 1, { r: true }, 0, { r: true } ]
+
+    it 'tracks removed drop index teleports', -> xf
+      # rm 0.a, move 0.b -> 0.c
+      doc: [{a:['a'], b:'b'}]
+      op1: [ 0, [ 'a', { r: true } ], [ 'b', { p: 0 } ], [ 'c', { d: 0 } ] ] # [{c:'b'}]
+      op2: [ 0, { d: 0, p: 1 }, [ 0, { d: 1 } ], [ 'a', { p: 0 } ] ] # [[{b:'b'}, 'a']]
+      conflict:
+        type: RM_UNEXPECTED_CONTENT
+        c1: rmConflict(0, 'a')
+        c2: mvConflict([0], [0, 0])
+      expect: [ 0, { r: true }, 0, { r: true } ]
+
+    it 'handles transforming past cancelled move', -> xf
+      op1: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
+      op2: [ 0, { p: 0, d: 0 } ]
+      expect: [ [ 0, { r: true } ], [ 10, { i: [ '' ] } ] ]
+
+    it 'correctly adjusts indexes in another fuzzer great', -> xf
+      op1: [ [ 0, { d: 0, r: true } ], [ 3, { p: 0 } ] ]
+      op2: [ [ 0, { p: 0 } ], [ 3, { d: 0 } ] ]
+      expect: [[0, d:0], [2, p:0], [3, r:true]]
+
+    it 'op2 moves into something op1 removes and op1 moves into that', -> xf
+      op1: [ [ 'a', { r: true }, 'aa', { p: 0 } ], [ 'b', 'x', { d: 0 } ] ]
+      op2: [ [ 'a', 'bb', { d: 0 } ], [ 'b', { p: 0 } ] ]
+      conflict:
+        type: RM_UNEXPECTED_CONTENT
+        c1: rmConflict('a')
+        c2: mvConflict(['b'], ['a', 'bb'])
+      expect: [ 'a', { r: true }, ['aa', r:true], ['bb', r:true]] # Also ok if we miss the second rs.
+
+    it 'op2 moves into op1 remove edge cases', ->
+      # Sorry not minified.
+      xf
+        op1: [ 'Came', 0, [ 0, { r: true }, 'he', { p: 0 } ], [ 1, { d: 0 }, 0, { i: 'time' } ] ]
+        op2: [ 'Came', 0, [ 0, 'he', [ 0, { d: 0 } ], [ 1, { es: [] } ] ], [ 1, { p: 0 } ] ],
+        expectLeft: [ 'Came', 0, 0, { r: true, d: 0 }, [ 0, { i: 'time' } ], [ 'he', { p: 0 } ] ]
+        expectRight: [ 'Came', 0, 0, { r: true, d: 0 }, [ 1, { i: 'time' } ], [ 'he', { p: 0 } ] ]
+
+      xf
+        op1: [ [ 0, [ 1, { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
+        op2: [ 0, 1, { i: {}, p: 0 }, 'b', { d: 0 } ]
+        expectLeft: [ [ 0, [ 1, 'b', { p: 0 } ], [ 2, { r: true } ] ], [ 1, 'xxx', { d: 0 } ] ]
+        expectRight: [ 0, 2, { r: true } ]
+
+    it 'translates indexes correctly in this fuzzer find', -> xf
+      op1: [ 0, { p: 0 }, 'x', { d: 0 } ]
+      op2: [ [ 0, { p: 0, d: 0 } ], [ 1, { i: 'y' } ] ]
+      expectLeft: [[0, { p: 0 }], [1, 'x', { d: 0 }]]
+      expectRight: null
+
+    it.skip 'buries children of blackholed values', -> xf
+      op1: [ [ 0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ], [ 'c', { d: 1 } ] ], [ 1, { p: 1 } ] ]
+      op2: [ 0, { p: 0 }, 'x', { d: 0 } ]
+      expect: [ 0, { r: true } ]
