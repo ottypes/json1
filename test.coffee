@@ -46,10 +46,12 @@ compose = ({op1, op2, expect}) ->
 
 DROP_COLLISION = 'drop collision'
 RM_UNEXPECTED_CONTENT = 'remove unexpected content'
+RM_EMBEDDED_EDIT = 'remove embedded edit'
 BLACKHOLE = 'blackhole'
 
 insConflict = (path...) -> {type:'insert', drop:path}
 rmConflict = (path...) -> {type:'remove', pick:path}
+editConflict = (path...) -> {type:'edit', drop:path}
 mvConflict = (from, to) -> {type:'move', pick:from, drop:to}
 
 xfConflict = ({op1, op2, conflict, expect, expectLeft, expectRight}) ->
@@ -789,6 +791,15 @@ describe 'json1', ->
         op2: [['a', p:0], ['x', d:0, p:1], ['z', d:1]]
         expect: ['z', r:true]
 
+      it 'vs edit', -> xf
+        op1: ['x', r:true]
+        op2: ['x', es:['hi']]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: rmConflict('x')
+          c2: editConflict('x')
+        expect: ['x', r:true]
+
       describe 'vs pick child', ->
         it 'move in', -> xf
           op1: ['x', r:true]
@@ -828,11 +839,6 @@ describe 'json1', ->
           op1: [['x', r:true, 'y', 'z', p:0], ['z', d:0]]
           op2: [['x', 'y', p:0], ['y', d:0]]
           expect: [['x', r:true], ['y', r:true, 'z', p:0], ['z', d:0]]
-
-      it 'vs edit', -> xf
-        op1: ['x', r:true]
-        op2: ['x', es:['hi']]
-        expect: ['x', r:true]
 
     describe 'op1 drop', ->
       it 'vs delete parent', -> xf
@@ -1008,11 +1014,19 @@ describe 'json1', ->
       it 'vs delete', -> xf
         op1: ['x', es:['hi']]
         op2: ['x', r:true]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict('x')
+          c2: rmConflict('x')
         expect: null
 
       it 'vs delete parent', -> xf
         op1: ['x', 'y', es:['hi']]
         op2: ['x', r:true]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict('x', 'y')
+          c2: rmConflict('x')
         expect: null
 
       it 'vs pick', -> xf
@@ -1186,6 +1200,25 @@ describe 'json1', ->
         op1: [['a', p:0], ['x', d:0]]
         op2: [['a', p:0], ['x', d:0]]
         expect: null # ??? Also ok for left: ['x', p:0, d:0]
+
+    describe 'discarded edit', ->
+      it 'edit removed directly', -> xf
+        op1: ['a', es:[]]
+        op2: ['a', r:true]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict('a')
+          c2: rmConflict('a')
+        expect: null
+
+      it 'edit inside new content throws RM_UNEXPECTED_CONTENT', -> xf
+        op1: ['a', 'b', i: 'hi', es:[]]
+        op2: ['a', r:true]
+        conflict:
+          type: RM_UNEXPECTED_CONTENT
+          c1: insConflict('a', 'b')
+          c2: rmConflict('a')
+        expect: null
 
     describe 'blackhole', ->
       it 'detects and errors', -> xf
@@ -1475,6 +1508,10 @@ describe 'json1', ->
       it 'an edit on a deleted object goes away', -> xf
         op1: [1, es:[2, 'hi']]
         op2: [1, r:"yo"]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict(1)
+          c2: rmConflict(1)
         expect: null
 
       # TODO Numbers
@@ -1545,11 +1582,19 @@ describe 'json1', ->
       xf
         op1: [2, r:true, 1, es:['hi']]
         op2: [3, 1, r:true]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict(2, 1)
+          c2: rmConflict(3, 1)
         expect: [2, r:true]
 
       xf
         op1: [[2, r:true, 1, es:['hi']], [3, 1, r:true]]
         op2: [3, 2, r:true]
+        conflict:
+          type: RM_EMBEDDED_EDIT
+          c1: editConflict(2, 1)
+          c2: rmConflict(3, 2)
         expect: [[2, r:true], [3, 1, r:true]]
 
     it 'transforms picks correctly', -> xf
