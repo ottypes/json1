@@ -1,10 +1,10 @@
-{randomInt, randomReal, randomWord} = require './node_modules/ot-fuzzer/lib/index.coffee'
+{randomInt, randomReal, randomWord} = require 'ot-fuzzer'
 # require 'ot-fuzzer'
 
 assert = require 'assert'
-{writeCursor} = require './lib/cursor'
-log = require './lib/log'
-type = require './lib/json1'
+{writeCursor} = require '../lib/cursor'
+log = require '../lib/log'
+type = require '../lib/json1'
 
 
 # This is an awful function to clone a document snapshot for use by the random

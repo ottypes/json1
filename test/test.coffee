@@ -6,11 +6,11 @@
 # Cleanups welcome, so long as you don't remove any tests.
 
 assert = require 'assert'
-{type} = require './index'
-log = require './lib/log'
+{type} = require '../index'
+log = require '../lib/log'
 
 {transform} = type
-deepClone = require './lib/deepClone'
+deepClone = require '../lib/deepClone'
 
 apply = ({doc:snapshot, op, expect}) ->
   type.setDebug(false)

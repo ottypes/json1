@@ -4,18 +4,18 @@
   "description": "JSON OT type",
   "main": "index.js",
   "dependencies": {
-    "ot-text": "^1.0.2",
+    "coffeescript": "^2.3.2",
     "ot-text-unicode": "^1.1.1"
   },
   "devDependencies": {
-    "coffee-script": "*",
     "mocha": "^5.2.0",
-    "ot-fuzzer": "^1.0.0",
-    "ot-simple": "^1.0.0"
+    "ot-fuzzer": "^1.1.0",
+    "ot-simple": "^1.0.0",
+    "ot-text": "^1.0.2"
   },
   "scripts": {
-    "test": "mocha --opts mocha.opts test.coffee",
-    "fuzzer": "mocha --opts mocha.opts fuzzer.coffee"
+    "test": "mocha test/test.coffee",
+    "fuzzer": "mocha test/fuzzer.coffee"
   },
   "repository": {
     "type": "git",

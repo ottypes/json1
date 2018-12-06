@@ -1,5 +1,7 @@
+require('coffeescript/register')
+
 const assert = require('assert')
-const {type} = require('./index')
+const {type} = require('../index')
 
 const run = module.exports = () => {
   // require('./lib/log').quiet = true
