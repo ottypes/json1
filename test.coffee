@@ -1904,3 +1904,18 @@ describe 'json1', ->
         c1: insConflict('b')
         c2: mvConflict(['a'], ['b'])
       expectRight: null
+
+    it.skip 'does not conflict on identical i-r pairs', -> xf
+      op1: [ { i: [], r: true }, 0, { i: 'a' } ]
+      op2: [ { i: [], r: true }, 0, { i: 'a' } ]
+      expect: null
+
+    it.skip 'generates a DROP_COLLISION on children', -> xf
+      op1: [ { i: [], r: true }, 0, { i: 'a' } ]
+      op2: [ { i: [], r: true }, 0, { i: 'b' } ]
+      conflict:
+        type: DROP_COLLISION
+        c1: insConflict(0)
+        c2: insConflict(0)
+      expectLeft: [0, r:true, i:'a']
+      expectRight: null
