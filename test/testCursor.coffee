@@ -31,23 +31,22 @@ describe 'cursors', ->
 
   describe 'copy using read cursors', ->
     test = (op) ->
-      c = readCursor op
+      r = readCursor op
       w = writeCursor()
+      path = []
       do f = ->
-        if component = c.getComponent()
+        if component = r.getComponent()
           # console.log 'component', component
           w.write k, v for k, v of component
 
-        # console.log 'down'
-        return if !c.descendFirst()
-        loop
-          # console.log "key: #{c.getKey()}"
-          w.descend c.getKey()
-          f c
+        assert.deepStrictEqual r.getPath(), path
+
+        for k from r.children()
+          path.push k
+          w.descend k
+          f()
           w.ascend()
-          break unless c.nextSibling()
-        c.ascend()
-        # console.log 'up'
+          path.pop()
 
       assert.deepEqual op, w.get()
         # console.log op
