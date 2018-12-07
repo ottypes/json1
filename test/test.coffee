@@ -1976,3 +1976,9 @@ describe 'json1', ->
         [1, i:1],
         [2, r:true]
       ]
+
+    it 'adjusts indexes of pick -> drop', -> xf
+      op1: [ 0, { p: 0, d: 0 } ]
+      op2: [ [ 0, { i: 'yo', p: 0 } ], [ 1, { d: 0 } ] ],
+      expectLeft: [ [ 0, { d: 0 } ], [ 1, { p: 0 } ] ]
+      expectRight: null
