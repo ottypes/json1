@@ -56,18 +56,22 @@ cMv = (from, to) -> {type:'move', pick:from, drop:to}
 invConflict = ({type, c1, c2}) -> {type, c1:c2, c2:c1}
 
 otherSide = (side) -> if side == 'left' then 'right' else 'left'
-checkConflict = ({op1, op2, side, conflict, expect}) ->
+checkConflict = ({op1, op2, side, conflict: expectConflict, expect}) ->
   # We should get the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
   for [side_, op1_, op2_, ec] in [
-        [side, op1, op2, conflict],
-        [otherSide(side), op2, op1, invConflict(conflict)]
+        [side, op1, op2, expectConflict],
+        [otherSide(side), op2, op1, if expectConflict then invConflict(expectConflict) else null]
       ]
     try
       d -> log('tryTransform', side_, op1_, op2_)
       {ok, conflict} = type.tryTransform op1_, op2_, side_
-      assert !ok, "Conflict erroneously succeeded (#{side_})"
-      d -> log('conflict', conflict)
-      assert.deepStrictEqual conflict, ec
+      if !ec?
+        # We don't care what the result is here; just that it doesn't conflict.
+        assert ok
+      else
+        assert !ok, "Conflict erroneously succeeded (#{side_})"
+        d -> log('conflict', conflict)
+        assert.deepStrictEqual conflict, ec
     catch e
       d ->
         console.error 'FAIL! Repro with:'
@@ -80,7 +84,7 @@ xf = ({op1, op2, conflict, conflictLeft, conflictRight, expect, expectLeft, expe
   if conflict != undefined then conflictLeft = conflictRight = conflict
 
   for [side, e, c] in [['left', expectLeft, conflictLeft], ['right', expectRight, conflictRight]]
-    checkConflict {op1, op2, side, conflict: c, expect: e} if c
+    checkConflict {op1, op2, side, conflict: c, expect: e}
 
     try
       result = if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
@@ -1929,7 +1933,12 @@ describe 'json1', ->
         c2: cMv(['a'], ['b'])
       expectRight: null
 
-    it.skip 'does not conflict on identical i-r pairs', -> xf
+    it 'does not conflict on identical r/i pairs', -> xf
+      op1: [{ i: [], r: true }]
+      op2: [{ i: [], r: true }]
+      expect: null
+
+    it.skip 'does not conflict on identical r/i pairs with identical drops inside', -> xf
       op1: [ { i: [], r: true }, 0, { i: 'a' } ]
       op2: [ { i: [], r: true }, 0, { i: 'a' } ]
       expect: null
@@ -1943,3 +1952,8 @@ describe 'json1', ->
         c2: cIns(0)
       expectLeft: [0, r:true, i:'a']
       expectRight: null
+
+    it.skip 'allows embedded edits in identical r/i', -> xf
+      op1: [ { r: true, i: '', es: [] } ]
+      op2: [ { r: true, i: '' } ]
+      expect: [es:[]]
