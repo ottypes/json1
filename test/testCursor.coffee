@@ -53,3 +53,36 @@ describe 'cursors', ->
         # console.log w.get()
     for d in data
       do (d) -> it "#{JSON.stringify d}", -> test d
+
+  describe 'write clone', ->
+    it 'works if you descend then clone', ->
+      w = writeCursor()
+      w.descendPath ['a', 'b', 'c']
+      w2 = w.clone()
+      w.ascend() for [0...3]
+      w2.write('i', 5)
+
+      assert.deepStrictEqual w.get(), ['a', 'b', 'c', i:5]
+
+    it 'works if you clone then descend', ->
+      w = writeCursor()
+      w.descendPath ['a', 'b', 'c']
+      w.write('i', 5)
+      w.ascend()
+
+      w2 = w.clone()
+      w2.descend('x')
+      w2.write('r', true)
+      w2.ascend()
+      
+      w.ascend()
+      w.ascend()
+
+      assert.deepStrictEqual w.get(), ['a', 'b', ['c', i:5], ['x', r:true]]
+
+    it 'merges into an empty writer', ->
+      w = writeCursor()
+      w2 = w.clone()
+      w2.write('r', true)
+      assert.deepStrictEqual w.get(), [{r:true}]
+
