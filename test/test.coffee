@@ -1938,6 +1938,11 @@ describe 'json1', ->
       op2: [{ i: [], r: true }]
       expect: null
 
+    it 'allows embedded edits in identical r/i', -> xf
+      op1: [ { r: true, i: '', es: [] } ]
+      op2: [ { r: true, i: '' } ]
+      expect: [es:[]]
+
     it.skip 'does not conflict on identical r/i pairs with identical drops inside', -> xf
       op1: [ { i: [], r: true }, 0, { i: 'a' } ]
       op2: [ { i: [], r: true }, 0, { i: 'a' } ]
@@ -1953,7 +1958,21 @@ describe 'json1', ->
       expectLeft: [0, r:true, i:'a']
       expectRight: null
 
-    it.skip 'allows embedded edits in identical r/i', -> xf
-      op1: [ { r: true, i: '', es: [] } ]
-      op2: [ { r: true, i: '' } ]
-      expect: [es:[]]
+    it.skip 'Transforms edit moves into the right dest', -> xf
+      op1: [ 0, { p: 0, d: 0 },
+        # These parts are all needed for some reason.
+        [ 0, { i: 1 } ],
+        [ 1, { r: true } ],
+        [ 3, { es: [] } ]
+      ]
+      op2: [ 0, [ 0, { d: 0 } ], [ 3, { p: 0 } ] ]
+      expectLeft: [ 0, {p:0, d:0},
+        [0, i:1],
+        [1, es:[]],
+        [2, r:true]
+      ]
+      expectRight: [0, {p:0, d:0}
+        [0, es:[]],
+        [1, i:1],
+        [2, r:true]
+      ]
