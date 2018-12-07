@@ -1,12 +1,12 @@
-{writeCursor, readCursor} = require './cursor'
+{writeCursor, readCursor} = require '../lib/cursor'
 assert = require 'assert'
 
-data = require('fs').readFileSync('ops.json', 'utf8').split('\n').filter((x) -> x != '').map(JSON.parse)
+data = require('fs').readFileSync(__dirname + '/ops.json', 'utf8').split('\n').filter((x) -> x != '').map(JSON.parse)
 
 describe 'cursors', ->
   describe 'writeCursor duplicates', ->
     test = (op) ->
-      {ascend, descend, write, get} = writeCursor()
+      w = writeCursor()
 
       f = (l) ->
         assert Array.isArray l
@@ -14,17 +14,17 @@ describe 'cursors', ->
         for c in l
           if typeof c in ['string', 'number']
             depth++
-            descend c
+            w.descend c
           else if Array.isArray c
             f c
           else if typeof c is 'object'
             for k, v of c
-              write k, v
+              w.write k, v
 
-        ascend() for [0...depth]
+        w.ascend() for [0...depth]
 
       f op if op != null
-      assert.deepEqual op, get()
+      assert.deepEqual op, w.get()
 
     for d in data
       do (d) -> it "#{JSON.stringify d}", -> test d
