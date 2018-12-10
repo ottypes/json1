@@ -1966,7 +1966,7 @@ describe 'json1', ->
       expectLeft: ['a', r:true, i:'a']
       expectRight: null
 
-    it.skip 'Transforms edit moves into the right dest', -> xf
+    it 'Transforms edit moves into the right dest', -> xf
       op1: [ 0, { p: 0, d: 0 },
         # These parts are all needed for some reason.
         [ 0, { i: 1 } ],
