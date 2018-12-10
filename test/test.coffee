@@ -1990,3 +1990,20 @@ describe 'json1', ->
       op2: [ [ 0, { i: 'yo', p: 0 } ], [ 1, { d: 0 } ] ],
       expectLeft: [ [ 0, { d: 0 } ], [ 1, { p: 0 } ] ]
       expectRight: null
+
+    it 'clears output outDrop when theres no pick', -> xf
+      # Again, not minimized. We return the right data, we were just double-
+      # descending into outDrop.
+      op1: [ [ 'the', { d: 0, p: 0 } ], [ 'toves', { r: true } ] ]
+      op2: [
+        [ 'bird', { d: 0 } ],
+        [ 'slain', { d: 1 } ],
+        [ 'the', { p: 1 } ],
+        [ 'toves', { p: 0 } ]
+      ]
+      expectLeft: [
+        [ 'bird', { r: true } ],
+        [ 'slain', { p: 0 } ],
+        [ 'the', { d: 0 } ]
+      ]
+      expectRight: [ 'bird', { r: true } ]
