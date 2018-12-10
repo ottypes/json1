@@ -40,6 +40,7 @@ describe 'cursors', ->
           w.write k, v for k, v of component
 
         assert.deepStrictEqual r.getPath(), path
+        assert.deepStrictEqual w.getPath(), path
 
         for k from r.children()
           path.push k
@@ -54,7 +55,7 @@ describe 'cursors', ->
     for d in data
       do (d) -> it "#{JSON.stringify d}", -> test d
 
-  describe 'write clone', ->
+  describe.skip 'write clone', ->
     it 'works if you descend then clone', ->
       w = writeCursor()
       w.descendPath ['a', 'b', 'c']

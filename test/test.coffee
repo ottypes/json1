@@ -790,6 +790,14 @@ describe 'json1', ->
           c2: cEdit('x')
         expect: ['x', r:true]
 
+      it 'vs move and insert', -> xf
+        op1: [ 'a', 1, { r: true } ]
+        op2: [
+          [ 'a', { p: 0 } ],
+          [ 'b', { d: 0 }, [ 0, { i: 5 } ], [ 1, { i: 5 } ] ]
+        ]
+        expect: ['b', 3, r:true]
+
       describe 'vs pick child', ->
         it 'move in', -> xf
           op1: ['x', r:true]
