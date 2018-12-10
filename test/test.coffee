@@ -1951,19 +1951,19 @@ describe 'json1', ->
       op2: [ { r: true, i: '' } ]
       expect: [es:[]]
 
-    it.skip 'does not conflict on identical r/i pairs with identical drops inside', -> xf
-      op1: [ { i: [], r: true }, 0, { i: 'a' } ]
-      op2: [ { i: [], r: true }, 0, { i: 'a' } ]
+    it 'does not conflict on identical r/i pairs with identical drops inside', -> xf
+      op1: [ { i: {}, r: true }, 'a', { i: 'a' } ]
+      op2: [ { i: {}, r: true }, 'a', { i: 'a' } ]
       expect: null
 
-    it.skip 'generates a DROP_COLLISION on children', -> xf
-      op1: [ { i: [], r: true }, 0, { i: 'a' } ]
-      op2: [ { i: [], r: true }, 0, { i: 'b' } ]
+    it 'generates a DROP_COLLISION on children', -> xf
+      op1: [ { i: {}, r: true }, 'a', { i: 'a' } ]
+      op2: [ { i: {}, r: true }, 'a', { i: 'b' } ]
       conflict:
         type: DROP_COLLISION
-        c1: cIns(0)
-        c2: cIns(0)
-      expectLeft: [0, r:true, i:'a']
+        c1: cIns('a')
+        c2: cIns('a')
+      expectLeft: ['a', r:true, i:'a']
       expectRight: null
 
     it.skip 'Transforms edit moves into the right dest', -> xf
