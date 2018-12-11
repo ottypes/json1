@@ -2007,3 +2007,20 @@ describe 'json1', ->
         [ 'the', { d: 0 } ]
       ]
       expectRight: [ 'bird', { r: true } ]
+
+    it 'pushes drop indexes by other held items', -> xf
+      op1: [ [ 0, { p: 0 }],
+        [ 1,
+          [ 0, { i: 'hi' } ],
+          [ 1, { d: 0, es: [] } ] ]
+      ]
+      op2: [
+        [ 0, { p: 1 }, 1, { d: 0 }, 2, { d: 1 } ],
+        [ 2, { p: 0 } ]
+      ]
+      expectLeft: [ 0, 1,
+        [ 0, { i: 'hi' } ],
+        [ 1, { d: 0, es: [] } ],
+        [ 2, { p: 0 } ]
+      ]
+      expectRight: [ 0, 1, [ 0, { i: 'hi' } ], [ 3, { es: [] } ] ]

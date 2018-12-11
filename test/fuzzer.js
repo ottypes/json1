@@ -13,7 +13,7 @@ const run = module.exports = () => {
 
   // const tracer = require('./tracer')(_t, genOp)
   //fuzzer(tracer, tracer.genOp, 100000)
-  fuzzer(_t, genOp, 100000)
+  fuzzer(_t, genOp, 1000000)
 }
 
 if (require.main === module) run()
