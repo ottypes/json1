@@ -613,6 +613,7 @@ describe 'json1', ->
       it '3', -> compose
         op1: [ { i: [ null, [] ] }, 0, { i: '' } ]
         op2: [ 1, { p: 0 }, 0, { d: 0 } ]
+        # ... it'd be way more consistent to drop the null separately rather than merging it??
         expect: [ { i: [ [] ] }, [ 0, { i: '' } ], [ 1, 0, { i: null } ] ]
 
       it '4', -> compose # This one triggered a bug in cursor!
@@ -2024,3 +2025,17 @@ describe 'json1', ->
         [ 2, { p: 0 } ]
       ]
       expectRight: [ 0, 1, [ 0, { i: 'hi' } ], [ 3, { es: [] } ] ]
+
+    it 'composes correctly with lots of removes', -> compose
+      op1: [ 3, 1, { r: true } ],
+      op2: [
+        [ 0, { es: [] } ],
+        [ 1, { r: true, es: [] } ],
+        [ 2, { r: true } ]
+      ]
+      expect: [
+        [ 0, { es: [] } ],
+        [ 1, { es: [], r: true } ],
+        [ 2, { r: true } ],
+        [ 3, 1, { r: true } ]
+      ]
