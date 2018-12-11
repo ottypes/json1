@@ -55,6 +55,27 @@ describe 'cursors', ->
     for d in data
       do (d) -> it "#{JSON.stringify d}", -> test d
 
+  describe 'fuzzer', ->
+
+    it 'cleans up position after mergeTree', ->
+      a = [ 1, 'c', { d: 1 } ]
+      w = writeCursor(a)
+
+      w.descend(0)
+        
+      w.descend('a')
+      w.write('p', 1)
+      w.ascend()
+      w.ascend()
+
+      w.descend(1)
+      w.mergeTree([{r:true}])
+      w.descend('b')
+      w.write('p', 0) # Crash!
+      w.ascend()
+      w.ascend()
+
+
   describe.skip 'write clone', ->
     it 'works if you descend then clone', ->
       w = writeCursor()
