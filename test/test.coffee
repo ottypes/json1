@@ -2039,3 +2039,18 @@ describe 'json1', ->
         [ 2, { r: true } ],
         [ 3, 1, { r: true } ]
       ]
+
+    it 'does not descend twice when p/r on an identical insert', -> xf
+      op1: [ [ 'a', { p: 0, i: '' } ], [ 'b', { d: 0 } ] ]
+      op2: [ 'a', { r: true, i: '' } ]
+      expect: null
+
+    it 'conflicts underneath a moved / inserted child', -> xf
+      op1: [ [ 'a', { p: 0, i: {} }, 'x', {i:5} ], [ 'b', { d: 0 } ] ]
+      op2: [ 'a', { r: true, i: {} }, 'x', {i:6} ]
+      conflict:
+        type: DROP_COLLISION
+        c1: cIns('a', 'x')
+        c2: cIns('a', 'x')
+      expectLeft: ['a', 'x', {r:true, i:5}]
+      expectRight: null
