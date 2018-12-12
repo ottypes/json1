@@ -157,13 +157,14 @@ describe 'json1', ->
 
     it 'allows some simple valid ops', ->
       pass null
-      pass [{es:["hi"]}]
-      pass [{e:"hi", et:'simple'}]
       pass [{i:[1,2,3]}]
       pass [{r:{}}]
       pass [['x',{p:0}], ['y',{d:0}]]
       pass [[0,{p:0}], [10,{d:0}]]
       pass [['a',{p:0}],['b',{d:0}],['x',{p:1}],['y',{d:1}]]
+      pass [{e:"hi", et:'simple'}]
+      pass [{es:["hi"]}]
+      pass [{ena:5}]
 
     it 'disallows invalid syntax', ->
       fail undefined
@@ -290,7 +291,11 @@ describe 'json1', ->
 
       it 'does not allow two edits in the same operation', ->
         fail [{e:{}, et:'simple', es:[1,2,3]}]
-        # + the edits for numbers.
+        fail [{es:[], ena:5}]
+        fail [{e:{}, et:'simple', ena:5}]
+
+      it 'fails if the type is missing', ->
+        fail [et:'missing', e:{}]
 
       it 'does not allow anything inside an edited subtree'
 
@@ -329,11 +334,24 @@ describe 'json1', ->
       n [[1,2,3, {p:0}], [1,2,30, {d:0}]], [1,2, [3, {p:0}], [30, {d:0}]]
       n [[1,2,30, {p:0}], [1,2,3, {d:0}]], [1,2, [3, {d:0}], [30, {p:0}]]
 
-    it 'normalizes embedded ops when available'
+    it 'will let you insert null', ->
+      n [{i:null}]
+
+    it 'normalizes embedded ops when available', ->
+      n [{es:[0, 'hi']}], [{es:['hi']}]
+      n [{et:'text_unicode', e:['hi']}], [{es:['hi']}]
+      n [{et:'text_unicode', e:[0, 'hi']}], [{es:['hi']}]
+      n [{et:'simple', e:{}}]
+      n [{et:'number', e:5}], [{ena:5}]
+      n [{ena:5}]
 
     it.skip 'normalizes embedded removes', ->
       n [1, {r:true}, 2, {r:true}], [1, {r:true}]
       n [{r:true}, 2, {r:true}], [{r:true}]
+
+    it 'throws if the type is missing', ->
+      # Not sure if this is the best behaviour but ... eh.
+      assert.throws -> n [et:'missing', e:{}]
 
 
 # ****** Apply ******
@@ -366,6 +384,11 @@ describe 'json1', ->
         op: [r:true, i:null]
         expect: null
 
+      apply
+        doc: 'hi'
+        op: [es:[2, ' there']]
+        expect: 'hi there'
+
       assert.throws -> type.apply null, [{i:5}]
 
       apply
@@ -380,41 +403,45 @@ describe 'json1', ->
 
       # TODO: And an edit of the root.
 
-    it 'can move 1', ->
-      apply
-        doc: {x:5}
-        op: [['x', p:0], ['y', d:0]]
-        expect: {y:5}
+    it 'can move 1', -> apply
+      doc: {x:5}
+      op: [['x', p:0], ['y', d:0]]
+      expect: {y:5}
 
-    it 'can move 2', ->
-      apply
-        doc: [0,1,2]
-        op: [[1, p:0], [2, d:0]]
-        expect: [0,2,1]
+    it 'can move 2', -> apply
+      doc: [0,1,2]
+      op: [[1, p:0], [2, d:0]]
+      expect: [0,2,1]
 
-    it 'can handle complex list index stuff', ->
-      apply
-        doc: [0,1,2,3,4,5]
-        op: [[1, r:{}, i:11], [2, r:{}, i:12]]
-        expect: [0,11,12,3,4,5]
+    it 'can handle complex list index stuff', -> apply
+      doc: [0,1,2,3,4,5]
+      op: [[1, r:{}, i:11], [2, r:{}, i:12]]
+      expect: [0,11,12,3,4,5]
 
-    it 'correctly handles interspersed descent and edits', ->
-      apply
-        doc: {x: {y: {was:'y'}, was:'x'}}
-        op: [['X',{d:0},'Y',{d:1}], ['x',{p:0},'y',{p:1}]]
-        expect: {X: {Y: {was:'y'}, was:'x'}}
+    it 'correctly handles interspersed descent and edits', -> apply
+      doc: {x: {y: {was:'y'}, was:'x'}}
+      op: [['X',{d:0},'Y',{d:1}], ['x',{p:0},'y',{p:1}]]
+      expect: {X: {Y: {was:'y'}, was:'x'}}
 
-    it 'can edit strings', ->
-      apply
-        doc: "errd"
-        op: [{es:[2,"maghe"]}]
-        expect: "ermagherd"
+    it 'can edit strings', -> apply
+      doc: "errd"
+      op: [{es:[2,"maghe"]}]
+      expect: "ermagherd"
 
-    it 'can edit subdocuments using an embedded type', ->
-      apply
-        doc: {str:'hai'}
-        op: [{e:{position:2, text:'wai'}, et:'simple'}]
-        expect: {str:'hawaii'}
+    it 'can edit numbers', -> apply
+      doc: 5
+      op: [ena:10]
+      expect: 15
+
+    it 'can edit child numbers', -> apply
+      doc: [20]
+      op: [0, ena:-100]
+      expect: [-80]
+
+    it 'can edit subdocuments using an embedded type', -> apply
+      doc: {str:'hai'}
+      op: [{e:{position:2, text:'wai'}, et:'simple'}]
+      expect: {str:'hawaii'}
 
     it 'applies edits after drops', -> apply
       doc: {x: "yooo"}
@@ -424,6 +451,10 @@ describe 'json1', ->
     it 'throws when the op traverses missing items', ->
       assert.throws -> type.apply [0, 'hi'], [1, p:0, 'x', d:0]
       assert.throws -> type.apply {}, [p:0, 'a', d:0]
+
+    it 'throws if the type is missing', ->
+      assert.throws -> type.apply {}, [et:'missing', e:{}]
+
 
 # ******* Compose *******
 
@@ -542,10 +573,15 @@ describe 'json1', ->
         op2: ['x', 0, r:true]
         expect: ['x', i:[]]
 
-      it 'composes edits', -> compose
+      it 'composes string edits', -> compose
         op1: [es:['hi']]
         op2: [es:[2, ' there']]
         expect: [es:['hi there']]
+
+      it 'composes number edits', -> compose
+        op1: [ena:10]
+        op2: [ena:-8]
+        expect: [ena:2]
 
       it 'transforms and composes edits', -> compose
         op1: ['x', es:['hi']]
@@ -561,6 +597,9 @@ describe 'json1', ->
         op1: ['x', es:['hi']]
         op2: ['x', r:true, i:'yo', es:[2, ' there']]
         expect: ['x', r:true, i:'yo', es:[2, ' there']]
+
+      it 'throws if the type is missing', ->
+        assert.throws -> type.compose [et:'missing', e:{}], [et:'missing', e:{}]
 
     describe 'op2 pick', ->
       it 'gets untransformed by op1 drops', ->
@@ -1036,17 +1075,28 @@ describe 'json1', ->
         op2: [['x', p:0], ['y', d:0]]
         expect: ['y', es:['hi']]
 
-      it 'vs edit', -> xf
+      it 'vs edit string', -> xf
         op1: ['x', es:['ab']]
         op2: ['x', es:['cd']]
         expectLeft: ['x', es:['ab']]
         expectRight: ['x', es:[2, 'ab']]
+
+      it 'vs edit number', -> xf
+        op1: [ena:5]
+        op2: [ena:100]
+        expect: [ena:5]
+
+      it 'throws if edit types arent compatible', ->
+        assert.throws -> type.transform [es:[]], [ena:5], 'left'
 
       it 'vs move and edit', -> xf
         op1: ['x', es:[1, 'ab']]
         op2: [['x', p:0], ['y', d:0, es:[d:1, 'cd']]]
         expectLeft: ['y', es:['ab']]
         expectRight: ['y', es:[2, 'ab']]
+
+      it 'throws if the type is missing', ->
+        assert.throws -> type.transform [et:'missing', e:{}], [et:'missing', e:{}], 'left'
 
     describe 'op2 cancel move', ->
       it 'and insert', -> xf

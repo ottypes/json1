@@ -92,7 +92,7 @@ The edit component object can have one or more of the following values:
 - **r** (remove): During the pickup phase, remove the subtree at the current position. The value is ignored, but you can store the removed value if you want the op to be invertible.
 - **d** (drop): During the drop phase, insert the subtree in the specified slot here. Eg `d:10`.
 - **i** (insert): During the drop phase, insert the immediate value here. Eg `i:"cabbage"`
-- **e** (edit): Apply the specified edit to the subdocument that is here. Eg `e:{type:…, op:…}`. Text edits are specialcased to allow you to simply write `es:[...op]` to use the [ot-text type](https://github.com/ottypes/text).
+- **e** (edit): Apply the specified edit to the subdocument that is here. Eg `et:'typename', e:<op>`. There are two special cases: You can simply write `es:[...op]` to use the [ot-text-unicode type](https://github.com/ottypes/text-unicode). And you can use `ena:X` to add X to the number at that location in the JSON tree.
 
 Operations can also contain a list of child operations. For example, suppose you want to set `obj.a.x = 1` and `obj.a.y = 2`. You could write an operation:
 
