@@ -25,13 +25,16 @@ randomKey = (obj) -> # this works on arrays too!
     else
       return keys[randomInt keys.length]
 
+letters = 'abcde'
+
 # Generate a random new key for a value in obj.
 randomNewKey = (obj) ->
   if Array.isArray obj
     return randomInt obj.length + 1
   else
     loop
-      key = randomWord()
+      # Mostly try just use a small letter
+      key = if randomInt(20) == 0 then randomWord() else letters[randomInt(letters.length)]
       break if obj[key] == undefined
     return key
 
@@ -108,7 +111,7 @@ set = (container, key, value) ->
       container[key] = value
 
 module.exports = genRandomOp = (data) ->
-  log 'genRandomOp', data
+  # log 'genRandomOp', data
 
   container = data: clone data
   w = writeCursor()
@@ -120,7 +123,7 @@ module.exports = genRandomOp = (data) ->
   # 1. move something
   # 2. insert something
   # 3. edit a string
-  mode = randomInt 4
+  mode = if data == undefined and randomReal() < 0.9 then 2 else randomInt 4
   #mode = 1
   #log 'mode', mode
   switch mode
@@ -176,15 +179,16 @@ module.exports = genRandomOp = (data) ->
 
   type.checkValidOp op
 
-  assert.deepEqual doc, type.apply clone(data), op
+  # assert.deepEqual doc, type.apply clone(data), op
 
   return [op, doc]
 
 
 if require.main == module
-  type.debug = true
-  log.quiet = false
   # log genRandomOp {}
   # log genRandomOp({x:5, y:7, z:[1,2,3]}) for [1..10]
-  # log genRandomOp({x:"hi", y:'omg', z:[1,'whoa',3]}) for [1..10]
-  log genRandomOp(null) for [1..10]
+  for [1..100]
+    type.debug = true
+    log.quiet = false
+    log genRandomOp({x:"hi", y:'omg', z:[1,'whoa',3]})
+    # log genRandomOp(undefined)
