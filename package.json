@@ -4,10 +4,10 @@
   "description": "JSON OT type",
   "main": "index.js",
   "dependencies": {
-    "coffeescript": "^2.3.2",
-    "ot-text-unicode": "^1.1.1"
+    "ot-text-unicode": "^2.0.0"
   },
   "devDependencies": {
+    "coffeescript": "^2.3.2",
     "mocha": "^5.2.0",
     "ot-fuzzer": "^1.1.0",
     "ot-simple": "^1.0.0",

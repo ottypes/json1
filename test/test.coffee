@@ -9,9 +9,10 @@ assert = require 'assert'
 # {type} = require '../index'
 type = require '../lib/json1'
 log = require '../lib/log'
+deepClone = require '../lib/deepClone'
 
 {transform} = type
-deepClone = require '../lib/deepClone'
+{DROP_COLLISION, RM_UNEXPECTED_CONTENT, BLACKHOLE} = type
 
 apply = ({doc:snapshot, op, expect}) ->
   type.setDebug(false)
@@ -43,14 +44,6 @@ compose = ({op1, op2, expect}) ->
       type.compose op1, op2
     throw e
 
-
-
-{
-  DROP_COLLISION,
-  RM_UNEXPECTED_CONTENT,
-  BLACKHOLE
-} = type
-
 cIns = (path...) -> {type:'insert', drop:path}
 cRm = (path...) -> {type:'remove', pick:path}
 cEdit = (path...) -> {type:'edit', drop:path}
@@ -66,14 +59,14 @@ checkConflict = ({op1, op2, side, conflict: expectConflict, expect}) ->
         [otherSide(side), op2, op1, if expectConflict then invConflict(expectConflict) else null]
       ]
     try
-      d -> log('tryTransform', side_, op1_, op2_)
+      # d -> log('tryTransform', side_, op1_, op2_)
       {ok, conflict} = type.tryTransform op1_, op2_, side_
       if !ec?
         # We don't care what the result is here; just that it doesn't conflict.
         assert ok
       else
         assert !ok, "Conflict erroneously succeeded (#{side_})"
-        d -> log('conflict', conflict)
+        # d -> log('conflict', conflict)
         assert.deepStrictEqual conflict, ec
     catch e
       d ->
@@ -339,8 +332,8 @@ describe 'json1', ->
 
     it 'normalizes embedded ops when available', ->
       n [{es:[0, 'hi']}], [{es:['hi']}]
-      n [{et:'text_unicode', e:['hi']}], [{es:['hi']}]
-      n [{et:'text_unicode', e:[0, 'hi']}], [{es:['hi']}]
+      n [{et:'text-unicode', e:['hi']}], [{es:['hi']}]
+      n [{et:'text-unicode', e:[0, 'hi']}], [{es:['hi']}]
       n [{et:'simple', e:{}}]
       n [{et:'number', e:5}], [{ena:5}]
       n [{ena:5}]
