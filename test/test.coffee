@@ -2057,3 +2057,15 @@ describe 'json1', ->
         c2: cIns('a', 'x')
       expectLeft: ['a', 'x', {r:true, i:5}]
       expectRight: null
+
+    it 'clears drop2 in transform moves', -> xf
+      doc: [b: a: 'hi']
+      op1: [0, d:0,
+        [ 'a', { es: [] } ],
+        [ 'b', { p: 0 } ]
+      ]
+      op2: [ 0, 'b',
+        [ 'a', { p: 0 } ],
+        [ 'b', { d: 0 } ]
+      ]
+      expect: [0, d:0, 'b', { p: 0, es:[] }]
