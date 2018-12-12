@@ -6,7 +6,8 @@
 # Cleanups welcome, so long as you don't remove any tests.
 
 assert = require 'assert'
-{type} = require '../index'
+# {type} = require '../index'
+type = require '../lib/json1'
 log = require '../lib/log'
 
 {transform} = type
@@ -44,9 +45,11 @@ compose = ({op1, op2, expect}) ->
 
 
 
-DROP_COLLISION = 'drop collision'
-RM_UNEXPECTED_CONTENT = 'remove unexpected content'
-BLACKHOLE = 'blackhole'
+{
+  DROP_COLLISION,
+  RM_UNEXPECTED_CONTENT,
+  BLACKHOLE
+} = type
 
 cIns = (path...) -> {type:'insert', drop:path}
 cRm = (path...) -> {type:'remove', pick:path}

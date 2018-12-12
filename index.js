@@ -1,1 +1,1 @@
-exports.type = require('./lib/json1')
+exports.type = require('./lib/json1.release')
