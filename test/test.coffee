@@ -2112,3 +2112,18 @@ describe 'json1', ->
         [ 'b', { d: 0 } ]
       ]
       expect: [0, d:0, 'b', { p: 0, es:[] }]
+
+    it 'descends correctly when op2 picks and drops', -> xf
+      op1: [
+        [ 'b', { d: 0 }, [ 1, { es: [] } ], [ 2, { i: null } ] ],
+        [ 'e', { p: 0 } ]
+      ]
+      op2: [ { p: 0, d: 0 }, 'e', 1, { p: 1, d: 1 } ]
+      expectLeft: [
+        [ 'b', { d: 0 }, [ 1, { i: null } ], [ 2, { es: [] } ]],
+        [ 'e', { p: 0 } ]
+      ]
+      expectRight: [
+        [ 'b', { d: 0 }, [ 1, { es: [] } ], [ 2, { i: null } ] ],
+        [ 'e', { p: 0 } ]
+      ]
