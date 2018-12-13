@@ -25,7 +25,7 @@ randomKey = (obj) -> # this works on arrays too!
     else
       return keys[randomInt keys.length]
 
-letters = 'abcde'
+letters = 'abxyz'
 
 # Generate a random new key for a value in obj.
 randomNewKey = (obj) ->
@@ -110,10 +110,10 @@ set = (container, key, value) ->
     else
       container[key] = value
 
-module.exports = genRandomOp = (data) ->
+genRandomOpPart = (data) ->
   # log 'genRandomOp', data
 
-  container = data: clone data
+  container = {data}
   w = writeCursor()
 
   # Remove something
@@ -175,19 +175,36 @@ module.exports = genRandomOp = (data) ->
   doc = container.data
   op = w.get()
 
-  log '-> generated op', op, 'doc', doc
-
   type.checkValidOp op
 
   # assert.deepEqual doc, type.apply clone(data), op
 
   return [op, doc]
 
+module.exports = genRandomOp = (doc) ->
+  doc = clone doc
+
+  # 90% chance of adding an op the first time through, then 50% each successive time.
+  chance = 0.99
+
+  op = null # Aggregate op
+
+  while randomReal() < chance
+    [opc, doc] = genRandomOpPart(doc)
+    log opc
+    # type.setDebug false
+    op = type.compose op, opc
+
+    chance = 0.5
+
+  # log.quiet = false
+  log '-> generated op', op, 'doc', doc
+  return [op, doc]
 
 if require.main == module
   # log genRandomOp {}
   # log genRandomOp({x:5, y:7, z:[1,2,3]}) for [1..10]
-  for [1..100]
+  for [1..10]
     type.debug = true
     log.quiet = false
     log genRandomOp({x:"hi", y:'omg', z:[1,'whoa',3]})
