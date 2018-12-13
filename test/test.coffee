@@ -550,6 +550,16 @@ describe 'json1', ->
         op2: ['x', i:'hi']
         expect: [i:{}, 'x', i:'hi']
 
+      it 'vs op2 string edit', -> compose
+        op1: [i:'hi']
+        op2: [es:[2, ' there']]
+        expect: [i:'hi', es:[2, ' there']]
+
+      it 'vs op2 number edit', -> compose
+        op1: [i:10]
+        op2: [ena:20]
+        expect: [i:10, ena:20]
+
     describe 'op1 edit', ->
       it 'removes the edit if the edited object is deleted', -> compose
         op1: ['x', es:['hi']]
@@ -2143,3 +2153,8 @@ describe 'json1', ->
       op1: [ { i: [ {}, 'a' ] }, 1, { i: 'b' } ]
       op2: [ [ 1, { r: 'b' } ], [ 2, { r: 'a' } ] ]
       expect: [ { i: [ {} ] } ]
+
+    it 'handles composes with ena: 0', -> compose
+      op1: [i:10]
+      op2: [ena:0]
+      expect: [i:10, ena:0] # Also ok: just discarding the ena:0.

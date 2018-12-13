@@ -136,6 +136,10 @@ genRandomOpPart = (data) ->
         [stringOp, result] = genString operand
         w.write 'es', stringOp
         parent[key] = result
+      else if mode is 1 and typeof operand is 'number'
+        increment = randomInt 10
+        w.write 'ena', increment
+        parent[key] += increment
       else
         # Remove it
         if operand != undefined
