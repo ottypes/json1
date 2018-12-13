@@ -15,7 +15,7 @@
     "terser": "^3.11.0"
   },
   "scripts": {
-    "test": "mocha test/cursor.coffee test/test.coffee",
+    "test": "mocha test/cursor.coffee test/test.coffee test/immutable.coffee",
     "fuzzer": "node test/fuzzer.js",
     "prepare": "terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < lib/json1.js > lib/json1.release.js"
   },
