@@ -2127,3 +2127,9 @@ describe 'json1', ->
         [ 'b', { d: 0 }, [ 1, { es: [] } ], [ 2, { i: null } ] ],
         [ 'e', { p: 0 } ]
       ]
+
+    it 'composes a pick out of the insert', -> compose
+      op1: [ { i: [ 5, { x: 6 } ] } ]
+      op2: [ [ 0, { r: true }, 'c', { d: 0 } ], [ 1, 'x', { p: 0 } ] ]
+      # expect: [{i: [{c: 6}]}]
+      expect: [ { i: [ {} ] }, 0, 'c', { i: 6 } ]
