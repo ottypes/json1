@@ -2146,7 +2146,7 @@ describe 'json1', ->
 
     it 'is not overeager to remove intermediate literal array items', -> compose
       op1: [ [ 0, { i: [ 'a', 'b' ] }, 0, { p: 0 } ], [ 1, 0, { d: 0 } ] ]
-      op2: [ 0, { r: true }, 1, { r: true } ]
+      op2: [ 0, { r: ['a'] }, 1, { r: 'b' } ]
       expect: [ 0, 0, { d: 0, p: 0 } ]
 
     it 'descends down insert indexes correctly', -> compose
@@ -2163,3 +2163,13 @@ describe 'json1', ->
       op1: [ [ 'a', { p: 0 } ], [ 'b', 1, { d: 0 } ] ]
       op2: [ [ 'b', { r: true }, 1, { p: 0 } ], [ 'c', { d: 0 } ]]
       expect: [ [ 'a', { p: 0 } ], [ 'b', { r: true } ], [ 'c', { d: 0 } ] ]
+
+    it 'lets you remove children of an op at 2 levels', -> compose
+      op1: [ { i: [ 'a', { x: 'hi' } ] } ]
+      op2: [ { r: true }, 1, 'x', { r: true } ]
+      expect: null
+
+    it 'discards op1 inserts inside a removed chunk', -> compose
+      op1: [ 'y', [ 1, { i: 'x' } ], [ 2, { i: [ 'a', 'b' ] } ] ]
+      op2: [ { r: true }, 'y', 2, 0, { r: true } ]
+      expect: [ { r: true } ]
