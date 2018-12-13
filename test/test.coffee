@@ -2158,3 +2158,8 @@ describe 'json1', ->
       op1: [i:10]
       op2: [ena:0]
       expect: [i:10, ena:0] # Also ok: just discarding the ena:0.
+
+    it 'handles rm parent with cross move', -> compose
+      op1: [ [ 'a', { p: 0 } ], [ 'b', 1, { d: 0 } ] ]
+      op2: [ [ 'b', { r: true }, 1, { p: 0 } ], [ 'c', { d: 0 } ]]
+      expect: [ [ 'a', { p: 0 } ], [ 'b', { r: true } ], [ 'c', { d: 0 } ] ]
