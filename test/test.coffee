@@ -2138,3 +2138,8 @@ describe 'json1', ->
       op1: [ [ 0, { i: [ 'a', 'b' ] }, 0, { p: 0 } ], [ 1, 0, { d: 0 } ] ]
       op2: [ 0, { r: true }, 1, { r: true } ]
       expect: [ 0, 0, { d: 0, p: 0 } ]
+
+    it 'descends down insert indexes correctly', -> compose
+      op1: [ { i: [ {}, 'a' ] }, 1, { i: 'b' } ]
+      op2: [ [ 1, { r: 'b' } ], [ 2, { r: 'a' } ] ]
+      expect: [ { i: [ {} ] } ]
