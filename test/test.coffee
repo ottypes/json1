@@ -2133,3 +2133,8 @@ describe 'json1', ->
       op2: [ [ 0, { r: true }, 'c', { d: 0 } ], [ 1, 'x', { p: 0 } ] ]
       # expect: [{i: [{c: 6}]}]
       expect: [ { i: [ {} ] }, 0, 'c', { i: 6 } ]
+
+    it 'is not overeager to remove intermediate literal array items', -> compose
+      op1: [ [ 0, { i: [ 'a', 'b' ] }, 0, { p: 0 } ], [ 1, 0, { d: 0 } ] ]
+      op2: [ 0, { r: true }, 1, { r: true } ]
+      expect: [ 0, 0, { d: 0, p: 0 } ]
