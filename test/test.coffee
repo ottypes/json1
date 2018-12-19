@@ -473,7 +473,7 @@ describe 'json1', ->
       assert.throws -> type.apply {}, [et:'missing', e:{}]
 
 
-  describe.skip 'apply path', ->
+  describe 'apply path', ->
     it 'does not modify path when op is unrelated', ->
       path ['a', 'b', 'c'], op: null
       path ['a', 'b', 'c'], op: ['x', i:5]
@@ -506,6 +506,12 @@ describe 'json1', ->
       path [1,2], op: [[1, 2, p:0], [10, d:0]], expect: [10]
       path [1,2], op: [1, [1, d:0], [2, p:0]], expect: [1, 1]
       path [1,2], op: [[1, 2, 3, p:0], [10, d:0]]
+
+    it 'handles pick parent and move', ->
+      path ['a', 'b', 'c'], op: [['a', r:true, 'b', p:0], ['x', d:0]], expect: ['x', 'c']
+
+    it 'adjusts indicies under a pick', ->
+      path ['a', 'b', 10], op: [['a', p:0, 'b', 1, r:true], ['x', d:0]], expect: ['x', 'b', 9]
 
     it.skip 'gen ops', ->
       # This should do something like:
