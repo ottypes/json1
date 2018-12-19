@@ -42,7 +42,7 @@ describe 'cursors', ->
         assert.deepStrictEqual r.getPath(), path
         assert.deepStrictEqual w.getPath(), path
 
-        for k from r.children()
+        for k from r
           path.push k
           w.descend k
           f()
