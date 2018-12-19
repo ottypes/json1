@@ -49,16 +49,23 @@ cRm = (path...) -> {type:'remove', pick:path}
 cEdit = (path...) -> {type:'edit', drop:path}
 cMv = (from, to) -> {type:'move', pick:from, drop:to}
 
-invConflict = ({type, c1, c2}) -> {type, c1:c2, c2:c1}
+invConflict = ({type, op1, op2}) -> {type, op1:op2, op2:op1}
+
+
 
 otherSide = (side) -> if side == 'left' then 'right' else 'left'
 checkConflict = ({op1, op2, side, conflict: expectConflict, expect}) ->
   # We should get the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
+  if expectConflict?
+    expectConflict.op1 = type.normalize(op1) if !expectConflict.op1
+    expectConflict.op2 = type.normalize(op2) if !expectConflict.op2
+
   for [side_, op1_, op2_, ec] in [
         [side, op1, op2, expectConflict],
         [otherSide(side), op2, op1, if expectConflict then invConflict(expectConflict) else null]
       ]
     try
+
       # d -> log('tryTransform', side_, op1_, op2_)
       {ok, conflict} = type.tryTransform op1_, op2_, side_
       if !ec?
@@ -67,6 +74,8 @@ checkConflict = ({op1, op2, side, conflict: expectConflict, expect}) ->
       else
         assert !ok, "Conflict erroneously succeeded (#{side_})"
         # d -> log('conflict', conflict)
+        conflict.op1 = type.normalize conflict.op1
+        conflict.op2 = type.normalize conflict.op2
         assert.deepStrictEqual conflict, ec
     catch e
       d ->
@@ -124,6 +133,19 @@ diamond = ({doc, op1, op2}) ->
     log doc12, '!=', doc21
     throw e
 
+
+path = (path, {op, expect}) ->
+  expect = path.slice() if expect == undefined
+
+  result = type.applyPath path, op
+  assert.deepStrictEqual result, expect
+
+  # Also check that path+X = expect+X
+  path2 = path.concat 'x'
+  expect2 = if expect? then expect.concat('x') else null
+  
+  result2 = type.applyPath path2, op
+  assert.deepStrictEqual result2, expect2
 
 
 describe 'json1', ->
@@ -346,6 +368,8 @@ describe 'json1', ->
       # Not sure if this is the best behaviour but ... eh.
       assert.throws -> n [et:'missing', e:{}]
 
+    it 'corrects weird pick and drop ids', ->
+      n [['x', p:1], ['y', d:1]], [['x', p:0], ['y', d:0]]
 
 # ****** Apply ******
 
@@ -447,6 +471,49 @@ describe 'json1', ->
 
     it 'throws if the type is missing', ->
       assert.throws -> type.apply {}, [et:'missing', e:{}]
+
+
+  describe.skip 'apply path', ->
+    it 'does not modify path when op is unrelated', ->
+      path ['a', 'b', 'c'], op: null
+      path ['a', 'b', 'c'], op: ['x', i:5]
+      path ['a', 'b', 'c'], op: ['x', r:true]
+      path ['a', 'b', 'c'], op: [['x', p:0], ['y', d:0]]
+      path [1,2,3], op: [2, i:5]
+      path [1,2,3], op: [1, 2, 4, i:5]
+      path [1], op: [1, 2, r:true]
+      path ['x'], op: ['x', 'y', r:true]
+
+    it 'adjusts list indicies', ->
+      path [2], op: [1, i:5], expect: [3]
+      path [2], op: [2, i:5], expect: [3]
+      path [2], op: [1, r:true], expect: [1]
+      path [2], op: [[1, p:0], [3, d:0]], expect: [1]
+      path [2], op: [[1, d:0], [3, p:0]], expect: [3]
+      path [2], op: [[2, d:0], [3, p:0]], expect: [3]
+
+    it 'returns null when the object at the path was removed', ->
+      path ['x'], op: [r:true], expect: null
+      path ['x'], op: ['x', r:true], expect: null
+      path [1], op: [r:true], expect: null
+      path [1], op: [1, r:true], expect: null
+
+    it 'moves the path', ->
+      path ['a', 'z'], op: [['a', p:0], ['y', d:0]], expect: ['y', 'z']
+      path ['a', 'b'], op: [['a', 'b', p:0], ['z', d:0]], expect: ['z']
+      path ['a', 'b'], op: [['a', 'b', 'c', p:0], ['z', d:0]]
+      path [1,2], op: [[1, p:0], [10, d:0]], expect: [10, 2]
+      path [1,2], op: [[1, 2, p:0], [10, d:0]], expect: [10]
+      path [1,2], op: [1, [1, d:0], [2, p:0]], expect: [1, 1]
+      path [1,2], op: [[1, 2, 3, p:0], [10, d:0]]
+
+    it.skip 'gen ops', ->
+      # This should do something like:
+      # - Generate a document
+      # - Generate op, a random operation
+      # - Generate a path to somewhere in the document and an edit we can do there -> op2
+      # - Check that transform(op2, op) == op2 at applyPath(path) or something like that.
+
 
 
 # ******* Compose *******
@@ -830,10 +897,7 @@ describe 'json1', ->
       it 'vs edit', -> xf
         op1: ['x', r:true]
         op2: ['x', es:['hi']]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cRm('x')
-          c2: cEdit('x')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: ['x', r:true]
 
       it 'vs move and insert', -> xf
@@ -848,10 +912,7 @@ describe 'json1', ->
         it 'move in', -> xf
           op1: ['x', r:true]
           op2: [['a', p:0], ['x', 'y', d:0]]
-          conflict:
-            type: RM_UNEXPECTED_CONTENT
-            c1: cRm('x')
-            c2: cMv(['a'], ['x', 'y'])
+          conflict: type: RM_UNEXPECTED_CONTENT
           expect: ['x', r:true, 'y', r:true] # Also ok if its just x, r:true
 
         it 'move across', -> xf
@@ -874,8 +935,7 @@ describe 'json1', ->
           op2: [['x', 'y', p:0], ['y', p:1], ['z', d:0, 'a', d:1]]
           conflict:
             type: RM_UNEXPECTED_CONTENT
-            c1: cRm('x')
-            c2: cMv(['y'], ['z', 'a'])
+            op2: [['y', p:0], ['z', 'a', d:0]] # cMv(['y'], ['z', 'a'])
           expect: [['x', r:true], ['z', r:true, 'a', r:true]]
 
         it 'mess', -> xf
@@ -888,10 +948,7 @@ describe 'json1', ->
       it 'vs delete parent', -> xf
         op1: [['x', p:0], ['y', 'a', d:0]]
         op2: ['y', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cMv(['x'], ['y', 'a'])
-          c2: cRm('y')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: ['x', r:true]
 
       it 'vs a cancelled parent', -> xf
@@ -900,8 +957,7 @@ describe 'json1', ->
         op2: ['x', r:true]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cMv(['y'], ['z', 'a'])
-          c2: cRm('x')
+          op1: [['y', p:0], ['z', 'a', d:0]] # c1: cMv(['y'], ['z', 'a'])
         expect: ['y', r:true]
 
       it 'vs pick parent', -> xf
@@ -912,10 +968,7 @@ describe 'json1', ->
       it 'vs drop', -> xf
         op1: [['x', p:0], ['z', d:0]]
         op2: [['y', p:0], ['z', d:0]]
-        conflict:
-          type: DROP_COLLISION
-          c1: cMv(['x'], ['z'])
-          c2: cMv(['y'], ['z'])
+        conflict: type: DROP_COLLISION
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
 
@@ -930,18 +983,14 @@ describe 'json1', ->
         op2: [['y', p:0], ['z', d:0]]
         conflict:
           type: DROP_COLLISION
-          c1: cMv(['x'], ['z'])
-          c2: cMv(['y'], ['z'])
+          op1: [['x', p:0], ['z', d:0]] #cMv(['x'], ['z'])
         expectLeft: [['a', p:0], ['x', p:1], ['z', r:true, d:1, 'a', d:0]]
         expectRight: [['a', r:true], ['x', r:true]]
 
       it 'vs insert', -> xf
         op1: [['x', p:0], ['z', d:0]]
         op2: ['z', i:5]
-        conflict:
-          type: DROP_COLLISION
-          c1: cMv(['x'], ['z'])
-          c2: cIns('z')
+        conflict: type: DROP_COLLISION
         expectLeft: [['x', p:0], ['z', r:true, d:0]]
         expectRight: ['x', r:true]
 
@@ -979,10 +1028,7 @@ describe 'json1', ->
       it 'vs delete parent', -> xf
         op1: ['y', 'a', i:5]
         op2: ['y', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cIns('y', 'a')
-          c2: cRm('y')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'vs pick parent', -> xf
@@ -993,20 +1039,14 @@ describe 'json1', ->
       it 'vs drop', -> xf
         op1: ['z', i:5]
         op2: [['y', p:0], ['z', d:0]]
-        conflict:
-          type: DROP_COLLISION
-          c1: cIns('z')
-          c2: cMv(['y'], ['z'])
+        conflict: type: DROP_COLLISION
         expectLeft: ['z', r:true, i:5]
         expectRight: null
 
       it 'vs insert', -> xf
         op1: ['z', i:5]
         op2: ['z', i:10]
-        conflict:
-          type: DROP_COLLISION
-          c1: cIns('z')
-          c2: cIns('z')
+        conflict: type: DROP_COLLISION
         expectLeft: ['z', r:true, i:5]
         expectRight: null
 
@@ -1043,8 +1083,8 @@ describe 'json1', ->
           op2: ['x', i:{}, 'y', i:6]
           conflict:
             type: DROP_COLLISION
-            c1: cIns('x', 'y')
-            c2: cIns('x', 'y')
+            op1: ['x', 'y', i:5]
+            op2: ['x', 'y', i:6]
           expectLeft: ['x', 'y', r:true, i:5]
           expectRight: null
 
@@ -1058,19 +1098,13 @@ describe 'json1', ->
       it 'vs delete', -> xf
         op1: ['x', es:['hi']]
         op2: ['x', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cEdit('x')
-          c2: cRm('x')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'vs delete parent', -> xf
         op1: ['x', 'y', es:['hi']]
         op2: ['x', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cEdit('x', 'y')
-          c2: cRm('x')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'vs pick', -> xf
@@ -1107,8 +1141,7 @@ describe 'json1', ->
         op2: [['x', 'a', p:0], ['y', d:0, 'b', i:5]]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cRm('x')
-          c2: cIns('y', 'b')
+          op2: ['y', 'b', i:5]
         expect: [['x', r:true], ['y', r:true, 'b', r:true]]
 
       it 'and another move (rm x vs x.a -> y, q -> y.b)', -> xf
@@ -1116,8 +1149,7 @@ describe 'json1', ->
         op2: [['q', p:1], ['x', 'a', p:0], ['y', d:0, 'b', d:1]]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cRm('x')
-          c2: cMv(['q'], ['y', 'b'])
+          op2: [['q', p:0], ['y', 'b', d:0]]
         expect: [['x', r:true], ['y', r:true, 'b', r:true]]
 
     describe 'op2 list move an op1 drop', ->
@@ -1163,19 +1195,13 @@ describe 'json1', ->
       it 'errors if you insert', -> xf
         op1: ['a', 'b', i:5]
         op2: ['a', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cIns('a', 'b')
-          c2: cRm('a')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'errors if you drop', -> xf
         op1: [['a', p:0], ['x', 'b', d:0]]
         op2: ['x', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cMv(['a'], ['x', 'b'])
-          c2: cRm('x')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: ['a', r:true]
 
       it 'errors if you rm then insert in a child', -> xf
@@ -1183,26 +1209,23 @@ describe 'json1', ->
         op2: ['a', r:true]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cIns('a', 'b')
-          c2: cRm('a')
+          op1: ['a', 'b', i:5]
         expect: null
 
-      it 'errors if the object is replaced', ->
+      it 'errors if the object is replaced', -> xf
         op1: ['a', 'b', i:5]
         op2: ['a', r:true, i:10]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cIns('a', 'b')
-          c2: cRm('a')
+          op2: ['a', r:true]
         expect: null
 
-      it 'handles a delete of the source parent by op2', ->
+      it 'handles a delete of the source parent by op2', -> xf
         op1: [['a', p:0], ['b', 'b', d:0]]
         op2: [['a', p:0], ['b', r:true, 'c', d:0]]
         conflictLeft:
           type: RM_UNEXPECTED_CONTENT
-          c1: cMv(['a'], ['b', 'b'])
-          c2: cRm('b')
+          op2: ['b', r:true]
         expectLeft: ['b', 'c', r:true]
         expectRight: null
 
@@ -1210,10 +1233,7 @@ describe 'json1', ->
       it 'errors if two ops insert different content into the same place in an object', -> xf
         op1: ['x', i:'hi']
         op2: ['x', i:'yo']
-        conflict:
-          type: DROP_COLLISION
-          c1: cIns('x')
-          c2: cIns('x')
+        conflict: type: DROP_COLLISION
         expectLeft: ['x', r:true, i:'hi']
         expectRight: null
 
@@ -1237,10 +1257,7 @@ describe 'json1', ->
       it 'errors if the inserts are at the root', -> xf
         op1: [i:1]
         op2: [i:2]
-        conflict:
-          type: DROP_COLLISION
-          c1: cIns()
-          c2: cIns()
+        conflict: type: DROP_COLLISION
         expectLeft: [r:true, i:1]
         expectRight: null
 
@@ -1248,30 +1265,21 @@ describe 'json1', ->
         op1: ['x', i:'hi']
         op2: [['a', p:0], ['x', d:0]]
         # ????
-        conflict:
-          type: DROP_COLLISION
-          c1: cIns('x')
-          c2: cMv(['a'], ['x'])
+        conflict: type: DROP_COLLISION
         expectLeft: ['x', r:true, i:'hi']
         expectRight: null
 
       it 'errors with drop vs insert', -> xf
         op1: [['a', p:0], ['x', d:0]]
         op2: ['x', i:'hi']
-        conflict:
-          type: DROP_COLLISION
-          c1: cMv(['a'], ['x'])
-          c2: cIns('x')
+        conflict: type: DROP_COLLISION
         expectLeft: [['a', p:0], ['x', r:true, d:0]]
         expectRight: ['a', r:true]
 
       it 'errors with drop vs drop', -> xf
         op1: [['a', p:0], ['x', d:0]]
         op2: [['b', p:0], ['x', d:0]]
-        conflict:
-          type: DROP_COLLISION
-          c1: cMv(['a'], ['x'])
-          c2: cMv(['b'], ['x'])
+        conflict: type: DROP_COLLISION
         expectLeft: [['a', p:0], ['x', r:true, d:0]]
         expectRight: ['a', r:true]
 
@@ -1280,13 +1288,13 @@ describe 'json1', ->
         op2: [['a', p:0], ['b', i:6], ['c', d:0]]
         conflictLeft:
           type: DROP_COLLISION
-          c1: cMv(['a'], ['b'])
-          c2: cIns('b')
+          op1: [['a', p:0], ['b', d:0]]
+          op2: ['b', i:6]
         expectLeft: [['b', r:true, d:0], ['c', p:0, i:5]]
         conflictRight:
           type: DROP_COLLISION
-          c1: cIns('c')
-          c2: cMv(['a'], ['c'])
+          op1: ['c', i:5]
+          op2: [['a', p:0], ['c', d:0]]
         expectRight: null
 
 
@@ -1294,10 +1302,7 @@ describe 'json1', ->
       it 'edit removed directly', -> xf
         op1: ['a', es:[]]
         op2: ['a', r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cEdit('a')
-          c2: cRm('a')
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'edit inside new content throws RM_UNEXPECTED_CONTENT', -> xf
@@ -1305,18 +1310,14 @@ describe 'json1', ->
         op2: ['a', r:true]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cIns('a', 'b')
-          c2: cRm('a')
+          op1: ['a', 'b', i:'hi']
         expect: null
 
     describe 'blackhole', ->
       it 'detects and errors', -> xf
         op1: [['x', p:0], ['y', 'a', d:0]]
         op2: [['x', 'a', d:0], ['y', p:0]]
-        conflict:
-          type: BLACKHOLE
-          c1: cMv(['x'], ['y', 'a'])
-          c2: cMv(['y'], ['x', 'a'])
+        conflict: type: BLACKHOLE
         expect: ['x', r:true, 'a', r:true] # Also equivalent: ['x', r:true]
 
       it 'blackhole logic does not apply when op2 removes parent', -> xf
@@ -1325,8 +1326,7 @@ describe 'json1', ->
         op2: [['x', 'a', d:0], ['y', p:0, 'xx', r:true]]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cMv(['x'], ['y', 'xx', 'a'])
-          c2: cRm('y', 'xx')
+          op2: ['y', 'xx', r:true]
         expect: ['x', r:true, 'a', r:true] # Also ok: ['x', r:true]
 
       it 'blackhole logic still applies when op2 inserts', -> xf
@@ -1334,17 +1334,14 @@ describe 'json1', ->
         op2: [['x', 'a', i:{}, 'b', d:0], ['y', p:0]]
         conflict:
           type: BLACKHOLE
-          c1: cMv(['x'], ['y', 'a', 'b'])
-          c2: cMv(['y'], ['x', 'a', 'b'])
+          op1: [['x', p:0], ['y', 'a', 'b', d:0]]
+          op2: [['x', 'a', 'b', d:0], ['y', p:0]]
         expect: ['x', r:true, 'a', r:true, 'b', r:true]
 
       it 'blackholes items in lists correctly', -> xf
         op1: [1, p:0, 'a', d:0]
         op2: [[1, 'b', d:0], [2, p:0]]
-        conflict:
-          type: BLACKHOLE
-          c1: cMv([1], [1, 'a'])
-          c2: cMv([2], [1, 'b'])
+        conflict: type: BLACKHOLE
         expect: [1, r:true, 'b', r:true]
 
       it 'blackholes items despite scrambled pick and drop slots', -> xf
@@ -1352,10 +1349,32 @@ describe 'json1', ->
         op2: [ [ 'x', 'a', { d: 0 } ], [ 'y', { p: 0 } ] ]
         conflict:
           type: BLACKHOLE
-          c1: cMv(['x'], ['y', 'a'])
-          c2: cMv(['y'], ['x', 'a'])
+          op1: [ [ 'x', { p: 0 } ], [ 'y', 'a', { d: 0 } ] ]
         expect: [['a', p:0, d:0], ['x', r:true, 'a', r:true]]
 
+      it 'handles chained blackholes', -> xf
+        op1: [ [ 'a', { p: 0 } ], # a->b.b, c->d.d
+          [ 'b', 'b', { d: 0 } ],
+          [ 'c', { p: 1 } ],
+          [ 'd', 'd', { d: 1 } ]
+        ]
+        op2: [ [ 'a', 'a', { d: 1 } ], # b->c.c, d->a.a
+          [ 'b', { p: 0 } ],
+          [ 'c', 'c', { d: 0 } ],
+          [ 'd', { p: 1 } ]
+        ]
+        conflict: type: BLACKHOLE
+          # c1: cMv(['a'], ['b', 'b'])
+          # c2: cMv(['b'], ['c', 'c'])
+        expect: [['a', r:true, 'a', r:true], ['c', r:true, 'c', r:true]]
+
+      it 'creates conflict return values with valid slot ids', -> xf
+        op1: [['a', p:0], ['b', d:0], ['x', p:1], ['y', 'a', d:1]]
+        op2: [['x', 'a', d:0], ['y', p:0]]
+        conflict:
+          type: BLACKHOLE
+          op1: [['x', p:0], ['y', 'a', d:0]]
+        expect: [['a', p:0], ['b', d:0], ['x', r:true, 'a', r:true]]
 
 
   describe 'transform-old', ->
@@ -1532,10 +1551,7 @@ describe 'json1', ->
       it 'insert vs delete parent', -> xf
         op1: [2, 'x', i:'hi']
         op2: [2, r:true]
-        conflict:
-          type: RM_UNEXPECTED_CONTENT
-          c1: cIns(2, 'x')
-          c2: cRm(2)
+        conflict: type: RM_UNEXPECTED_CONTENT
         expect: null
 
       it 'transforms against inserts in my own list', ->
@@ -1599,8 +1615,7 @@ describe 'json1', ->
         op2: [1, r:"yo"]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cEdit(1)
-          c2: cRm(1)
+          op2: [1, r:true] # .... It'd be better if this copied the remove.
         expect: null
 
       # TODO Numbers
@@ -1673,8 +1688,7 @@ describe 'json1', ->
         op2: [3, 1, r:true]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cEdit(2, 1)
-          c2: cRm(3, 1)
+          op1: [2, 1, es:['hi']]
         expect: [2, r:true]
 
       xf
@@ -1682,8 +1696,7 @@ describe 'json1', ->
         op2: [3, 2, r:true]
         conflict:
           type: RM_UNEXPECTED_CONTENT
-          c1: cEdit(2, 1)
-          c2: cRm(3, 2)
+          op1: [2, 1, es:['hi']]
         expect: [[2, r:true], [3, 1, r:true]]
 
     it 'transforms picks correctly', -> xf
@@ -1729,10 +1742,7 @@ describe 'json1', ->
       doc: undefined
       op1: [i:'hi']
       op2: [i:null]
-      conflict:
-        type: DROP_COLLISION
-        c1: cIns()
-        c2: cIns()
+      conflict: type: DROP_COLLISION
       expectLeft: [r:true, i:'hi']
       expectRight: null
 
@@ -1753,10 +1763,7 @@ describe 'json1', ->
       doc: [ 'a', 'b', {} ]
       op1: [[0, p:0], [1, 'x', d:0]] # -> ['b', x:'a']
       op2: [1, p:0, 'x', d:0] # -> ['a', x:'b']
-      conflict:
-        type: DROP_COLLISION
-        c1: cMv([0], [1, 'x'])
-        c2: cMv([1], [1, 'x'])
+      conflict: type: DROP_COLLISION
       expectLeft: [[0, p:0, 'x', d:0], [1, 'x', r:true]]
       expectRight: [0, r:true]
 
@@ -1840,8 +1847,7 @@ describe 'json1', ->
       op2: [ 0, { i: 0 } ],
       conflict:
         type: RM_UNEXPECTED_CONTENT
-        c1: cRm()
-        c2: cIns(0)
+        op1: [r:true]
       expect: [ { r: true, i: [] }, 0, { r:true, i: '' } ]
 
     it 'edit moved inside a removed area should be removed', -> xf
@@ -1849,8 +1855,7 @@ describe 'json1', ->
       op2: [[ 0, 'x', { d: 0 } ], [ 3, { p: 0 } ]]
       conflict:
         type: RM_UNEXPECTED_CONTENT
-        c1: cRm(0)
-        c2: cMv([3], [0, 'x'])
+        op1: [0, r:true]
       expect: [ 0, { r: true }, 'x', {r:true} ]
 
     it 'advances indexes correctly with mixed numbers', -> xf
@@ -1889,8 +1894,8 @@ describe 'json1', ->
       op2: [ [ 'a', { p: 0 }, 0, 0, { p: 1 } ], [ 'b', { d: 0 }, 0, 1, 0, { d: 1 } ] ]
       conflict:
         type: RM_UNEXPECTED_CONTENT
-        c1: cRm('a', 0, 2)
-        c2: cMv(['a', 0, 0], ['b', 0, 1, 0])
+        op1: ['a', 0, 2, r:true]
+        op2: [ [ 'a', 0, 0, { p: 0 } ], [ 'b', 0, 1, 0, { d: 0 } ] ]
       expect: [ 'b', 0, 1, { r: true }, 0, { r: true } ]
 
     it 'tracks removed drop index teleports', -> xf
@@ -1900,8 +1905,8 @@ describe 'json1', ->
       op2: [ 0, { d: 0, p: 1 }, [ 0, { d: 1 } ], [ 'a', { p: 0 } ] ] # [[{b:'b'}, 'a']]
       conflict:
         type: RM_UNEXPECTED_CONTENT
-        c1: cRm(0, 'a')
-        c2: cMv([0], [0, 0])
+        op1: [0, 'a', r:true]
+        op2: [0, p:0, 0, d:0]
       expect: [ 0, { r: true }, 0, { r: true } ]
 
     it 'handles transforming past cancelled move', -> xf
@@ -1919,8 +1924,7 @@ describe 'json1', ->
       op2: [ [ 'a', 'bb', { d: 0 } ], [ 'b', { p: 0 } ] ]
       conflict:
         type: RM_UNEXPECTED_CONTENT
-        c1: cRm('a')
-        c2: cMv(['b'], ['a', 'bb'])
+        op1: ['a', r:true]
       expect: [ 'a', { r: true }, ['aa', r:true], ['bb', r:true]] # Also ok if we miss the second rs.
 
     it 'op2 moves into op1 remove edge cases', ->
@@ -1946,10 +1950,13 @@ describe 'json1', ->
     it 'buries children of blackholed values', -> xf
       op1: [ [ 0, [ 'a', { p: 0 } ], [ 'b', { d: 0 } ], [ 'c', { d: 1 } ] ], [ 1, { p: 1 } ] ]
       op2: [ 0, { p: 0 }, 'x', { d: 0 } ]
-      conflict:
-        type: BLACKHOLE
-        c1: cMv([1], [0, 'c'])
-        c2: cMv([0], [0, 'x'])
+      # This is a bit interesting. The question is, which op2 picks and drops
+      # should we include in the output? For now the answer is that we include
+      # anything in both ops thats going to end up inside the blackholed
+      # content.
+      conflict: type: BLACKHOLE
+
+        # op1: [[0, 'c', d:0], [1, p:0]]
       expect: [ 0, r: true, 'x', r:true ]
 
     it 'does not conflict when removed target gets moved inside removed container', ->
@@ -1962,8 +1969,7 @@ describe 'json1', ->
         op2: [ 'a', [ 'x', { p: 0 } ], [ 'y', { d: 0 } ] ]
         conflictRight:
           type: RM_UNEXPECTED_CONTENT
-          c1: cRm('a')
-          c2: cMv(['a', 'x'], ['a', 'y'])
+          op1: ['a', r:true]
         expectLeft: [ [ 'a', { r: true }, 'y', { p: 0 } ], [ 'b', { d: 0 } ] ]
         expectRight: [ 'a', { r: true }, 'y', {r:true}]
 
@@ -1973,8 +1979,7 @@ describe 'json1', ->
         expectLeft: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
         conflictRight:
           type: RM_UNEXPECTED_CONTENT
-          c1: cRm('a')
-          c2: cMv(['a', 1], ['a', 0])
+          op1: ['a', r:true]
         expectRight: [ 'a', { r: true }, 0, {r:true}]
 
       expect: [ [ 'a', { r: true }, 0, { p: 0 } ], [ 'b', { d: 0 } ] ]
@@ -1994,8 +1999,7 @@ describe 'json1', ->
       expectLeft: [['b', {p:0, i:'hi'}], ['c', d:0]]
       conflictRight:
         type: DROP_COLLISION
-        c1: cIns('b')
-        c2: cMv(['a'], ['b'])
+        op1: [ 'b', { i: 'hi' } ]
       expectRight: null
 
     it 'does not conflict on identical r/i pairs', -> xf
@@ -2018,8 +2022,8 @@ describe 'json1', ->
       op2: [ { i: {}, r: true }, 'a', { i: 'b' } ]
       conflict:
         type: DROP_COLLISION
-        c1: cIns('a')
-        c2: cIns('a')
+        op1: ['a', { i: 'a' } ]
+        op2: ['a', { i: 'b' } ]
       expectLeft: ['a', r:true, i:'a']
       expectRight: null
 
@@ -2106,8 +2110,8 @@ describe 'json1', ->
       op2: [ 'a', { r: true, i: {} }, 'x', {i:6} ]
       conflict:
         type: DROP_COLLISION
-        c1: cIns('a', 'x')
-        c2: cIns('a', 'x')
+        op1: ['a', 'x', i:5]
+        op2: ['a', 'x', i:6]
       expectLeft: ['a', 'x', {r:true, i:5}]
       expectRight: null
 
@@ -2173,3 +2177,21 @@ describe 'json1', ->
       op1: [ 'y', [ 1, { i: 'x' } ], [ 2, { i: [ 'a', 'b' ] } ] ]
       op2: [ { r: true }, 'y', 2, 0, { r: true } ]
       expect: [ { r: true } ]
+
+    it 'handles deeply nested blackhole operations', -> xf
+      op1: [
+        [ 'x', { p: 0 } ],
+        [ 'y',
+          [ 'a',
+            [ 'j', { p: 1 } ],
+            [ 'k', { d: 1 } ]
+          ],
+          [ 'b', { d: 0 }]
+        ]
+      ]
+      op2: [
+        [ 'x', 'xx', { d: 0 }, 'j', 'jj', { d: 1 } ],
+        [ 'y', { p: 1 }, 'a', { p: 0 } ]
+      ]
+      conflict: type: BLACKHOLE
+      expect: ['x', r:true, 'xx', r:true, 'j', 'jj', r:true]
