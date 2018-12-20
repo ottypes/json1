@@ -1,12 +1,77 @@
 # JSON1
 
-> Note: This is *not complete*. See [this issue](https://github.com/josephg/json1/issues/4) for up to date information.
+> Status: Preview release. Usable; but contains rare, known bugs. See below
 
-This is an operational transformation type for arbitrary JSON trees thats been
-a work in progress for a few years. It is written to replace
-[ottypes/json0](https://github.com/ottypes/json0).
+This is an operational transformation type for arbitrary JSON trees. It supports concurrently editing arbitrarily complex nested structures. Fancy features:
 
-The spec is listed in [spec.md](spec.md).
+- Support for arbitrarily moving objects in the JSON tree. Useful for example, to move workflowy items around while the items themselves are being edited
+- Supports embedded subtypes. So you can embed rich text using quilljs or something inside your JSON tree
+- Conflicts! Most CRDT / OT style systems are conflict free. This library can run in a conflict free mode too, but doing so will sometimes lose user data. So you can opt in to have conflicts thrown when mutual edits will interfere.
+
+It is written to replace [ottypes/json0](https://github.com/ottypes/json0). JSON1 implements a superset of JSON0's functionality.
+
+The spec for operations themselves is listed in [spec.md](spec.md).
+
+
+## Usage
+
+The JSON library has 2 main APIs:
+
+- The core OT API, which is a type with standard `apply`, `compose`, `transform`, etc functions. The standard API for this is [documented here](https://github.com/ottypes/docs). This is exposed via `require('ot-json').type`.
+- A simple API for creating operations.
+
+```javascript
+const json1 = require('ot-json1')
+
+const op1 = json1.moveOp(['a', 'x'], ['a', 'y'])
+
+// The easiest way to make compound operations is to just compose smaller operations
+const op2 = [
+  json1.moveOp(['a'], ['b']),
+  json1.insertOp(['b', 'z'], 'hi there')
+].reduce(json1.type.compose, null)
+
+// op2 = [['a', {p:0}], ['b', {d:0}, 'x', {i: 'hi there'}]]
+
+const op1_ = json1.type.transform(op1, op2, 'left')
+// op1_ now moves b.x -> b.y, since the contents of a were moved to b
+
+let doc = {a: {x: 5}}
+doc = json1.type.apply(doc, op2) // doc = {b: {x: 5, z: 'hi there'}}
+doc = json1.type.apply(doc, op1_) // doc = {b: {y: 5, z: 'hi there'}}
+```
+
+### Standard operation creation functions
+
+- `json1.removeOp(path, value?)`: Remove the value at the specified path. Becomes `[...path, {r: value | true}]`
+- `json1.moveOp(fromPath, toPath)`: Moves the value at `fromPath` to `toPath`.
+- `json1.insertOp(path, value)`: Insert the specified value at the specified path
+- `json1.replaceOp(path, oldVal, newVal)`: Replace the object at path with `newVal`. If you don't care about invertibility, pass `true` for oldVal.
+- `json1.editOp(path, subtype, op)`: Modify the value at the specified path `op`, using JSON type `subtype`. The type must be registered first using `json1.type.registerSubtype(typeObj)`. Eg, `json1.type.registerSubtype(require('rich-text'))`. It can be specified using the type name, the type URI or the type object. The [unicode text](https://github.com/ottypes/text-unicode) type and the simple number add type (TODO documentation) are registered by default.
+
+These functions all return very simple operations. The easiest way to make more complex operations is to combine these pieces using `compose`. For example:
+
+```javascript
+const op = [
+  json1.insertOp([], {title: '', contents: '', public: false}),
+  json1.editOp(['title'], 'text-unicode', ['My cool blog entry']),
+  json1.replaceOp(['public', false, true])
+].reduce(json1.type.compose, null)
+```
+
+# Limitations
+
+Your document must only contain pure JSON-stringifyable content. No dates, functions or self-references allowed. Your object should be identical to `JSON.parse(JSON.stringify(obj))`.
+
+Note that this library is currently in preview release. The fuzzer finds convergence bugs in the transform function results after a million or so iterations. So, this code is usable, but it is only 99.9% correct or something. You shouldn't run into these problems in everyday use; but we still need to address them.
+
+There may also be some minor API changes before 1.0, including:
+
+- Flag conflicts when two operations move the same object
+- I might rename `applyPath` to something else (`transformCursor` is what the equivalent method is called in the string type, although its a bit of a weird name here). This function also currently doesn't transform anything inside a child edit, and it should.
+- Port the whole thing to typescript
+- I might expose the full cursor API if this is useful.
+
 
 
 ## License
