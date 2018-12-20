@@ -72,24 +72,37 @@ const op = [
 > TODO: Describe how this works and how conflict handling is configured
 
 
+## Interoperability with JSON0
+
+This library supports a superset of the capabilities of JSON0, but the two types have some important differences:
+
+- JSON0 notably doesn't support moves between object keys
+- JSON0 doesn't support moving child values from one object to another
+- JSON0 and JSON1 use different embedded string types. JSON1 uses [text-unicode](https://github.com/ottypes/text-unicode) which uses proper unicode offsets. JSON0 uses the older [text](https://github.com/ottypes/text) type which uses UTF16 pair offsets. These are normally the same, but notably differ when embedding emoji characters.
+
+You can convert JSON0 operations to JSON1 operations using [json0-to-1](https://github.com/ottypes/json0-to-1). This is a work in progress and doesn't currently support converting string values. Please make noise & consider helping out if this conversion code is important to you. This conversion code guarantees that `json1.apply(doc, convert(json0_op)) === json0.apply(doc, json0_op)` but this invariant is not true through transform. `json1.transform(convert(op1), convert(op2)) !== convert(json0.transform(op1, op2))` in some cases due to slightly different handling of conflicting list indexes.
+
+
 # Limitations
 
 Your document must only contain pure JSON-stringifyable content. No dates, functions or self-references allowed. Your object should be identical to `JSON.parse(JSON.stringify(obj))`.
 
-Note that this library is currently in preview release. The fuzzer finds convergence bugs in the transform function results after a million or so iterations. So, this code is usable, but it is only 99.9% correct or something. You shouldn't run into these problems in everyday use; but we still need to address them.
+Note that this library is currently in preview release. In practical terms, this means:
 
-There may also be some minor API changes before 1.0, including:
-
-- Flag conflicts when two operations move the same object
-- I might rename `applyPath` to something else (`transformCursor` is what the equivalent method is called in the string type, although its a bit of a weird name here). This function also currently doesn't transform anything inside a child edit, and it should.
-- Port the whole thing to typescript
-- I might expose the full cursor API if this is useful.
+- The fuzzer finds convergence bugs in the transform function results after a million or so iterations. So, this code is usable, but there are some [extremely complex operations](https://github.com/ottypes/json1/blob/4a0741d402ca631710e4e27f4f34647954c1f7d8/test/test.coffee#L2230-L2246) that this library currently struggles with. You shouldn't run into any of these problems in everyday use.
+- There may also be some reasonably minor API changes before 1.0
+- `applyPath` doesn't currently transform cursors inside an edited string document
+- `applyPath` doesn't currently have fuzzer tests. There are probably a couple bugs there that the fuzzer will find as soon as we hook it up.
+- `applyPath` may be renamed to something else (`transformCursor` is what the equivalent method is called in the string type, although its a bit of a weird name here). This function also currently doesn't transform anything inside a child edit, and it should.
+- We're missing a conflict for situations when two operations both move the same object to different locations. Currently the left operation will silently 'win' and the other operation's move will be discarded. But this behaviour should be user configurable
+- I want the whole library ported to typescript once its correct
+- I haven't exposed the internal cursor API, which is used internally to traverse operations. I'd be happy to expose this if someone provides a good, clear use case for doing so.
 
 
 
 ## License
 
-Copyright (c) 2013-2015, Joseph Gentle &lt;me@josephg.com&gt;
+Copyright (c) 2013-2018, Joseph Gentle &lt;me@josephg.com&gt;
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
