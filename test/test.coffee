@@ -44,11 +44,6 @@ compose = ({op1, op2, expect}) ->
       type.compose op1, op2
     throw e
 
-cIns = (path...) -> {type:'insert', drop:path}
-cRm = (path...) -> {type:'remove', pick:path}
-cEdit = (path...) -> {type:'edit', drop:path}
-cMv = (from, to) -> {type:'move', pick:from, drop:to}
-
 invConflict = ({type, op1, op2}) -> {type, op1:op2, op2:op1}
 
 
@@ -98,7 +93,7 @@ xf = ({op1, op2, conflict, conflictLeft, conflictRight, expect, expectLeft, expe
       d ->
         console.error 'FAIL! Repro with:'
         console.log "transform(#{JSON.stringify(op1)}, #{JSON.stringify(op2)}, '#{side}')"
-        if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
+        # if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
       throw e
 
 
@@ -1235,6 +1230,17 @@ describe 'json1', ->
         expectLeft: ['b', 'c', r:true]
         expectRight: null
 
+      it.skip 'returns symmetric errors when both ops delete the other', -> xf
+        # The problem here is that there's two conflicts we want to return.
+        # Which one should be returned first? It'd be nice for the order of
+        # conflict returning to be symmetric - that is, if we know multiple
+        # conflicts happen, order them based on left/right. But I haven't done
+        # that, so we get different conflicts out of this in a first pass.
+        op1: [ [ 'x', { r: true } ], [ 'y', 'a', { i: {} } ] ]
+        op2: [ [ 'x', 'a', { i: {} } ], [ 'y', { r: true } ] ]
+        conflict: type: RM_UNEXPECTED_CONTENT
+        expect: ['x', r:true]
+
     describe 'overlapping drop', ->
       it 'errors if two ops insert different content into the same place in an object', -> xf
         op1: ['x', i:'hi']
@@ -2201,3 +2207,19 @@ describe 'json1', ->
       ]
       conflict: type: BLACKHOLE
       expect: ['x', r:true, 'xx', r:true, 'j', 'jj', r:true]
+
+    it 'does not list removed op1 moves in the blackhole info', -> xf
+      op1: [
+        [ 'a', [ 'j', { d: 0 } ], [ 'k', { d: 1 } ] ],
+        [ 'b', { p: 0 }, 'z', 0, { p: 1 } ]
+      ]
+      op2: [
+        [ 'a', { p: 0 } ],
+        [ 'b', [ 'y', { d: 0 } ], [ 'z', { r: true } ] ]
+      ]
+      conflict:
+        type: BLACKHOLE
+        op1: [ [ 'a', 'j', { d: 0 } ], [ 'b', { p: 0 } ] ]
+        op2: [ [ 'a', { p: 0 } ], [ 'b', 'y', { d: 0 } ] ]
+      expect: ['b', r:true, 'y', r:true]
+
