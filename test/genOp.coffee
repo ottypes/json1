@@ -4,7 +4,7 @@
 assert = require 'assert'
 {writeCursor} = require '../lib/cursor'
 log = require '../lib/log'
-type = require '../lib/json1'
+{type} = require '../lib/json1'
 
 
 # This is an awful function to clone a document snapshot for use by the random

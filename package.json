@@ -2,7 +2,7 @@
   "name": "ot-json1",
   "version": "0.0.1",
   "description": "JSON OT type",
-  "main": "index.js",
+  "main": "lib/json1.release.js",
   "dependencies": {
     "ot-text-unicode": "^2.0.0"
   },
@@ -20,7 +20,6 @@
     "prepare": "terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < lib/json1.js > lib/json1.release.js"
   },
   "files": [
-    "index.js",
     "lib/"
   ],
   "repository": {

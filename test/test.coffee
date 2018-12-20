@@ -7,7 +7,7 @@
 
 assert = require 'assert'
 # {type} = require '../index'
-type = require '../lib/json1'
+{type} = require '../lib/json1'
 log = require '../lib/log'
 deepClone = require '../lib/deepClone'
 

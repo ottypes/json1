@@ -1,5 +1,5 @@
 assert = require 'assert'
-type = require '../lib/json1'
+{type} = require '../lib/json1'
 log = require '../lib/log'
 genOp = require './genOp'
 deepClone = require '../lib/deepClone'
