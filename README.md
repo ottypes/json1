@@ -34,11 +34,19 @@ const op2 = [
 // op2 = [['a', {p:0}], ['b', {d:0}, 'x', {i: 'hi there'}]]
 
 const op1_ = json1.type.transform(op1, op2, 'left')
-// op1_ now moves b.x -> b.y, since the contents of a were moved to b
+// op1_ now moves b.x -> b.y instead, because op2 moved 'a' to 'b'.
 
 let doc = {a: {x: 5}}
 doc = json1.type.apply(doc, op2) // doc = {b: {x: 5, z: 'hi there'}}
 doc = json1.type.apply(doc, op1_) // doc = {b: {y: 5, z: 'hi there'}}
+
+
+// Using the CP1 diamond property, this is the same as:
+
+doc = {a: {x: 5}}
+doc = json1.type.apply(doc, op1) // doc = {a: {y: 5}}
+const op2_ = json1.type.transform(op2, op1, 'right')
+doc = json1.type.apply(doc, op2) // doc = {b: {y: 5, z: 'hi there'}}
 ```
 
 ### Standard operation creation functions
