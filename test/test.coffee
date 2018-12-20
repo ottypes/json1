@@ -515,6 +515,9 @@ describe 'json1', ->
       # - Generate a path to somewhere in the document and an edit we can do there -> op2
       # - Check that transform(op2, op) == op2 at applyPath(path) or something like that.
 
+    it.skip 'calls transformCursor with embedded string edits'
+      # For embedded string operations (and other things that have
+      # transformCursor or applyPath or whatever) we should call that.
 
 
 # ******* Compose *******
@@ -2223,3 +2226,40 @@ describe 'json1', ->
         op2: [ [ 'a', { p: 0 } ], [ 'b', 'y', { d: 0 } ] ]
       expect: ['b', r:true, 'y', r:true]
 
+    it 'handles overlapping pick in blackholes', -> xf
+      # This looks complicated, but its really not so bad. Its:
+      # a->b.0, a.x -> z
+      # vs
+      # b -> a.x -> a.y
+      #
+      # Its a bit twisty because we're both picking up the same element and
+      # putting it in different places. This is why we have different left and
+      # right results.
+      op1: [
+        [ 'a', { p: 1 }, 'x', { p: 0 } ],
+        [ 'b', 0, { d: 1 } ],
+        [ 'z', { d: 0 } ]
+      ]
+      op2: [
+        [ 'a', [ 'x', { d: 0, p: 1 } ], [ 'y', { d: 1 } ] ],
+        [ 'b', { p: 0 } ]
+      ]
+      conflictLeft:
+        type: BLACKHOLE
+        op1: [['a', p:0], ['b', 0, d:0]]
+        op2: [['a', 'x', d:0], ['b', p:0]]
+      expectLeft: [
+        [ 'a', { r: true },
+          [ 'x', { r: true } ],
+          [ 'y', { p: 0 } ]
+        ],
+        [ 'z', { d: 0 } ]
+      ]
+      conflictRight:
+        type: BLACKHOLE
+        op1: [['a', p:0], ['b', 0, d:0]]
+      expectRight: [ 'a', { r: true },
+        [ 'x', { r: true } ],
+        [ 'y', { r: true } ]
+      ]
+    
