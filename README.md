@@ -1,16 +1,16 @@
 # JSON1
 
-> Status: Preview release. Usable; but contains rare, known bugs. See below
+> Status: Preview release. Usable; but contains known bugs. See below.
 
 This is an operational transformation type for arbitrary JSON trees. It supports concurrently editing arbitrarily complex nested structures. Fancy features:
 
-- Support for arbitrarily moving objects in the JSON tree. Useful for example, to move workflowy items around while the items themselves are being edited
-- Supports embedded subtypes. So you can embed rich text using quilljs or something inside your JSON tree
-- Conflicts! Most CRDT / OT style systems are conflict free. This library can run in a conflict free mode too, but doing so will sometimes lose user data. So you can opt in to have conflicts thrown when mutual edits will interfere.
+- Support for arbitrarily moving objects in the JSON tree. You could, for example, implement [workflowy](https://workflowy.com) using this, allowing items to be collaboratively moved around and edited. Or Maya. Or google wave 2. Or ... Anything!
+- Supports embedded subtypes. For example, you can embed rich text documents using quilljs or something inside your JSON tree
+- Conflicts! Unlike CRDTs, this library can be configured to refuse to accept operations which would result in lost data. For example, if two users both insert into the same location, instead of silently choosing a winner arbitrarily, you can throw an exception and tell the user whats going on.
 
-It is written to replace [ottypes/json0](https://github.com/ottypes/json0). JSON1 implements a superset of JSON0's functionality.
+This code it is written to replace [ottypes/json0](https://github.com/ottypes/json0). JSON1 implements a superset of JSON0's functionality.
 
-The spec for operations themselves is listed in [spec.md](spec.md).
+The spec for operations is in [spec.md](spec.md).
 
 
 ## Usage
@@ -58,6 +58,11 @@ const op = [
   json1.replaceOp(['public', false, true])
 ].reduce(json1.type.compose, null)
 ```
+
+### Conflicts
+
+> TODO: Describe how this works and how conflict handling is configured
+
 
 # Limitations
 
