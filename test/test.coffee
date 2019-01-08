@@ -132,14 +132,14 @@ diamond = ({doc, op1, op2}) ->
 path = (path, {op, expect}) ->
   expect = path.slice() if expect == undefined
 
-  result = type.applyPath path, op
+  result = type.transformPosition path, op
   assert.deepStrictEqual result, expect
 
   # Also check that path+X = expect+X
   path2 = path.concat 'x'
   expect2 = if expect? then expect.concat('x') else null
   
-  result2 = type.applyPath path2, op
+  result2 = type.transformPosition path2, op
   assert.deepStrictEqual result2, expect2
 
 
@@ -513,11 +513,14 @@ describe 'json1', ->
       # - Generate a document
       # - Generate op, a random operation
       # - Generate a path to somewhere in the document and an edit we can do there -> op2
-      # - Check that transform(op2, op) == op2 at applyPath(path) or something like that.
+      # - Check that transform(op2, op) == op2 at transformPosition(path) or something like that.
 
-    it.skip 'calls transformCursor with embedded string edits'
+    it 'calls transformPosition with embedded string edits if available', ->
       # For embedded string operations (and other things that have
-      # transformCursor or applyPath or whatever) we should call that.
+      # transformPosition or transformPosition or whatever) we should call that.
+      path ['x','y','z', 1], op: ['x','y','z', es:['abc']], expect: ['x','y','z', 4]
+      path ['x','y','z', 1], op: ['x','y','z', es:['💃']], expect: ['x','y','z', 2]
+      path ['x','y','z'], op: ['x','y','z', es:['💃']], expect: ['x','y','z']
 
 
 # ******* Compose *******
