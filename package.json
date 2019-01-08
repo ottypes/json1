@@ -4,7 +4,7 @@
   "description": "JSON OT type",
   "main": "lib/json1.release.js",
   "dependencies": {
-    "ot-text-unicode": "^2.0.0"
+    "ot-text-unicode": "^3.0.0"
   },
   "devDependencies": {
     "coffeescript": "^2.3.2",
