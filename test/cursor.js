@@ -5,10 +5,14 @@
  * DS205: Consider reworking code to avoid use of IIFEs
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-const {writeCursor, readCursor} = require('../lib/cursor');
+const { writeCursor, readCursor } = require('../lib/cursor');
 const assert = require('assert');
 
-const data = require('fs').readFileSync(__dirname + '/ops.json', 'utf8').split('\n').filter(x => x !== '').map(JSON.parse);
+const data = require('fs')
+  .readFileSync(__dirname + '/ops.json', 'utf8')
+  .split('\n')
+  .filter(x => x !== '')
+  .map(JSON.parse);
 
 describe('cursors', function() {
   describe('writeCursor duplicates', function() {
@@ -32,15 +36,18 @@ describe('cursors', function() {
           }
         }
 
-        return __range__(0, depth, false).map((i) => w.ascend());
+        return __range__(0, depth, false).map(i => w.ascend());
       };
 
-      if (op !== null) { f(op); }
+      if (op !== null) {
+        f(op);
+      }
       return assert.deepEqual(op, w.get());
     };
 
-    return Array.from(data).map((d) =>
-      (d => it(`${JSON.stringify(d)}`, () => test(d)))(d));
+    return Array.from(data).map(d =>
+      (d => it(`${JSON.stringify(d)}`, () => test(d)))(d)
+    );
   });
 
   describe('copy using read cursors', function() {
@@ -51,9 +58,12 @@ describe('cursors', function() {
       const path = [];
       (f = function() {
         let component, k;
-        if (component = r.getComponent()) {
+        if ((component = r.getComponent())) {
           // console.log 'component', component
-          for (k in component) { const v = component[k]; w.write(k, v); }
+          for (k in component) {
+            const v = component[k];
+            w.write(k, v);
+          }
         }
 
         assert.deepStrictEqual(r.getPath(), path);
@@ -74,33 +84,32 @@ describe('cursors', function() {
 
       return assert.deepEqual(op, w.get());
     };
-        // console.log op
-        // console.log w.get()
-    return Array.from(data).map((d) =>
-      (d => it(`${JSON.stringify(d)}`, () => test(d)))(d));
+    // console.log op
+    // console.log w.get()
+    return Array.from(data).map(d =>
+      (d => it(`${JSON.stringify(d)}`, () => test(d)))(d)
+    );
   });
 
   return describe('fuzzer', () =>
-
     it('cleans up position after mergeTree', function() {
-      const a = [ 1, 'c', { d: 1 } ];
+      const a = [1, 'c', { d: 1 }];
       const w = writeCursor(a);
 
       w.descend(0);
-        
+
       w.descend('a');
       w.write('p', 1);
       w.ascend();
       w.ascend();
 
       w.descend(1);
-      w.mergeTree([{r:true}]);
+      w.mergeTree([{ r: true }]);
       w.descend('b');
       w.write('p', 0); // Crash!
       w.ascend();
       return w.ascend();
-    })
-  );
+    }));
 });
 
 function __range__(left, right, inclusive) {
