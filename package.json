@@ -8,6 +8,7 @@
     "ot-text-unicode": "^3.0.0"
   },
   "devDependencies": {
+    "coffeescript": "^2.4.1",
     "mocha": "^5.2.0",
     "ot-fuzzer": "^1.1.0",
     "ot-simple": "^1.0.0",
