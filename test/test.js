@@ -1,10 +1,3 @@
-/*
- * decaffeinate suggestions:
- * DS102: Remove unnecessary code created because of implicit returns
- * DS205: Consider reworking code to avoid use of IIFEs
- * DS207: Consider shorter variations of null checks
- * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
- */
 // Unit tests for the JSON1 OT type.
 //
 // These tests are quite unstructured. You can see the skeletons of a few
@@ -13,7 +6,6 @@
 // Cleanups welcome, so long as you don't remove any tests.
 
 const assert = require('assert')
-// {type} = require '../index'
 const { type } = require('../lib/json1')
 const log = require('../lib/log')
 const deepClone = require('../lib/deepClone')
@@ -21,7 +13,7 @@ const deepClone = require('../lib/deepClone')
 const { transform } = type
 const { DROP_COLLISION, RM_UNEXPECTED_CONTENT, BLACKHOLE } = type
 
-const apply = function({ doc: snapshot, op, expect }) {
+const apply = ({ doc: snapshot, op, expect }) => {
   type.setDebug(false)
 
   const orig = deepClone(snapshot)
@@ -31,22 +23,23 @@ const apply = function({ doc: snapshot, op, expect }) {
     return assert.deepStrictEqual(result, expect)
   } catch (e) {
     console.log(
-      `Apply failed! Repro apply( ${JSON.stringify(snapshot)}, ${JSON.stringify(
-        op
-      )} )`
+      [
+        'Apply failed! Repro ',
+        `apply( ${JSON.stringify(snapshot)}, ${JSON.stringify(op)} )`
+      ].join('')
     )
     console.log(`expected output: ${JSON.stringify(expect)}`)
     throw e
   }
 }
 
-const d = function(fn) {
+const d = fn => {
   type.setDebug(true)
   fn()
   return type.setDebug(false)
 }
 
-const compose = function({ op1, op2, expect }) {
+const compose = ({ op1, op2, expect }) => {
   try {
     const result = type.compose(
       op1,
@@ -54,7 +47,7 @@ const compose = function({ op1, op2, expect }) {
     )
     return assert.deepStrictEqual(result, expect)
   } catch (e) {
-    d(function() {
+    d(() => {
       console.error('FAIL! Repro with:')
       console.log(`compose( ${JSON.stringify(op1)}, ${JSON.stringify(op2)} )`)
       console.log(`expected output: ${JSON.stringify(expect)}`)
@@ -69,20 +62,15 @@ const compose = function({ op1, op2, expect }) {
 
 const invConflict = ({ type, op1, op2 }) => ({ type, op1: op2, op2: op1 })
 
-const otherSide = function(side) {
-  if (side === 'left') {
-    return 'right'
-  } else {
-    return 'left'
-  }
-}
-const checkConflict = function({
+const otherSide = side => (side === 'left' ? 'right' : 'left')
+
+const checkConflict = ({
   op1,
   op2,
   side,
   conflict: expectConflict,
   expect
-}) {
+}) => {
   // We should get the same conflict with xf(op1, op2, left) and xf(op2, op1, right).
   if (expectConflict != null) {
     if (!expectConflict.op1) {
@@ -93,48 +81,45 @@ const checkConflict = function({
     }
   }
 
-  return (() => {
-    const result = []
-    for (var [side_, op1_, op2_, ec] of [
-      [side, op1, op2, expectConflict],
-      [
-        otherSide(side),
-        op2,
-        op1,
-        expectConflict ? invConflict(expectConflict) : null
-      ]
-    ]) {
-      try {
-        // d -> log('tryTransform', side_, op1_, op2_)
-        const { ok, conflict } = type.tryTransform(op1_, op2_, side_)
-        if (ec == null) {
-          // We don't care what the result is here; just that it doesn't conflict.
-          result.push(assert(ok))
-        } else {
-          assert(!ok, `Conflict erroneously succeeded (${side_})`)
-          // d -> log('conflict', conflict)
-          conflict.op1 = type.normalize(conflict.op1)
-          conflict.op2 = type.normalize(conflict.op2)
-          result.push(assert.deepStrictEqual(conflict, ec))
-        }
-      } catch (e) {
-        d(function() {
-          console.error('FAIL! Repro with:')
-          console.log(
-            `tryTransform(${JSON.stringify(op1_)}, ${JSON.stringify(
-              op2_
-            )}, '${side_}')`
-          )
-          return type.tryTransform(op1_, op2_, side_)
-        })
-        throw e
+  const result = []
+  for (let [side_, op1_, op2_, ec] of [
+    [side, op1, op2, expectConflict],
+    [
+      otherSide(side),
+      op2,
+      op1,
+      expectConflict ? invConflict(expectConflict) : null
+    ]
+  ]) {
+    try {
+      // d -> log('tryTransform', side_, op1_, op2_)
+      const { ok, conflict } = type.tryTransform(op1_, op2_, side_)
+      if (ec == null) {
+        // We don't care what the result is here; just that it doesn't conflict.
+        result.push(assert(ok))
+      } else {
+        assert(!ok, `Conflict erroneously succeeded (${side_})`)
+        // d -> log('conflict', conflict)
+        conflict.op1 = type.normalize(conflict.op1)
+        conflict.op2 = type.normalize(conflict.op2)
+        result.push(assert.deepStrictEqual(conflict, ec))
       }
+    } catch (e) {
+      d(() => {
+        console.error('FAIL! Repro with:')
+        console.log(
+          `tryTransform(${JSON.stringify(op1_)}, ${JSON.stringify(
+            op2_
+          )}, '${side_}')`
+        )
+        return type.tryTransform(op1_, op2_, side_)
+      })
+      throw e
     }
-    return result
-  })()
+  }
 }
 
-const xf = function({
+const xf = ({
   op1,
   op2,
   conflict,
@@ -143,7 +128,7 @@ const xf = function({
   expect,
   expectLeft,
   expectRight
-}) {
+}) => {
   if (expect !== undefined) {
     expectLeft = expectRight = expect
   }
@@ -151,39 +136,33 @@ const xf = function({
     conflictLeft = conflictRight = conflict
   }
 
-  return (() => {
-    const result1 = []
-    for (var [side, e, c] of [
-      ['left', expectLeft, conflictLeft],
-      ['right', expectRight, conflictRight]
-    ]) {
-      checkConflict({ op1, op2, side, conflict: c, expect: e })
+  for (let [side, e, c] of [
+    ['left', expectLeft, conflictLeft],
+    ['right', expectRight, conflictRight]
+  ]) {
+    checkConflict({ op1, op2, side, conflict: c, expect: e })
 
-      try {
-        const result =
-          c != null
-            ? type.transformNoConflict(op1, op2, side)
-            : transform(op1, op2, side)
-        result1.push(assert.deepStrictEqual(result, e))
-      } catch (error) {
-        e = error
-        d(function() {
-          console.error('FAIL! Repro with:')
-          return console.log(
-            `transform(${JSON.stringify(op1)}, ${JSON.stringify(
-              op2
-            )}, '${side}')`
-          )
-        })
-        // if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
-        throw e
-      }
+    try {
+      const result =
+        c != null
+          ? type.transformNoConflict(op1, op2, side)
+          : transform(op1, op2, side)
+      assert.deepStrictEqual(result, e)
+    } catch (error) {
+      e = error
+      d(() => {
+        console.error('FAIL! Repro with:')
+        console.log(
+          `transform(${JSON.stringify(op1)}, ${JSON.stringify(op2)}, '${side}')`
+        )
+      })
+      // if c? then type.transformNoConflict op1, op2, side else transform op1, op2, side
+      throw e
     }
-    return result1
-  })()
+  }
 }
 
-const diamond = function({ doc, op1, op2 }) {
+const diamond = ({ doc, op1, op2 }) => {
   let doc1, doc12, doc2, doc21, op1_, op2_
   type.setDebug(false)
 
@@ -216,7 +195,7 @@ const diamond = function({ doc, op1, op2 }) {
   }
 }
 
-const path = function(path, { op, expect }) {
+const path = (path, { op, expect }) => {
   if (expect === undefined) {
     expect = path.slice()
   }
@@ -229,18 +208,18 @@ const path = function(path, { op, expect }) {
   const expect2 = expect != null ? expect.concat('x') : null
 
   const result2 = type.transformPosition(path2, op)
-  return assert.deepStrictEqual(result2, expect2)
+  assert.deepStrictEqual(result2, expect2)
 }
 
-describe('json1', function() {
-  before(function() {
+describe('json1', () => {
+  before(() => {
     type.registerSubtype(require('ot-simple'))
     return type.setDebug(true)
   })
   after(() => type.setDebug(false))
 
-  describe('checkOp', function() {
-    const pass = function(op) {
+  describe('checkOp', () => {
+    const pass = op => {
       try {
         return type.checkValidOp(op)
       } catch (e) {
@@ -249,7 +228,7 @@ describe('json1', function() {
       }
     }
 
-    const fail = function(op) {
+    const fail = op => {
       try {
         return assert.throws(() => type.checkValidOp(op))
       } catch (e) {
@@ -259,7 +238,7 @@ describe('json1', function() {
       }
     }
 
-    it('allows some simple valid ops', function() {
+    it('allows some simple valid ops', () => {
       pass(null)
       pass([{ i: [1, 2, 3] }])
       pass([{ r: {} }])
@@ -268,10 +247,10 @@ describe('json1', function() {
       pass([['a', { p: 0 }], ['b', { d: 0 }], ['x', { p: 1 }], ['y', { d: 1 }]])
       pass([{ e: 'hi', et: 'simple' }])
       pass([{ es: ['hi'] }])
-      return pass([{ ena: 5 }])
+      pass([{ ena: 5 }])
     })
 
-    it('disallows invalid syntax', function() {
+    it('disallows invalid syntax', () => {
       fail(undefined)
       fail({})
       fail('hi')
@@ -283,29 +262,29 @@ describe('json1', function() {
       fail([{ invalid: true }])
       fail([10, {}])
       fail([10, { invalid: true }])
-      return fail([10, 'hi'])
+      fail([10, 'hi'])
     })
 
-    it('throws if there is any empty leaves', function() {
+    it('throws if there is any empty leaves', () => {
       fail([])
       fail(['x'])
       fail(['x', {}])
       fail(['x', []])
       fail([10])
       fail([10, {}])
-      return fail([10, []])
+      fail([10, []])
     })
 
-    it('ensures path components are non-zero integers or strings', function() {
+    it('ensures path components are non-zero integers or strings', () => {
       fail([-1, { r: {} }])
       fail([0.5, { r: {} }])
       fail([true, { r: {} }])
       fail([false, { r: {} }])
       fail([null, { r: {} }])
-      return fail([undefined, { r: {} }])
+      fail([undefined, { r: {} }])
     })
 
-    it('does not allow two pickups or two drops in a component', function() {
+    it('does not allow two pickups or two drops in a component', () => {
       fail([{ p: 0, r: {} }])
       fail([{ p: 1, r: {} }])
       fail(['x', { p: 0, r: {} }])
@@ -314,123 +293,117 @@ describe('json1', function() {
       fail([{ d: 0, i: 'hi' }])
       fail([{ d: 1, i: 'hi' }])
       fail([10, { d: 0, i: 'hi' }])
-      return fail([10, { d: 1, i: 'hi' }])
+      fail([10, { d: 1, i: 'hi' }])
     })
 
-    it('throws if there are mismatched pickups / drops', function() {
+    it('throws if there are mismatched pickups / drops', () => {
       fail([{ p: 0 }])
       fail([{ d: 0 }])
       fail(['x', { p: 0 }])
       fail([10, { p: 0 }])
       fail(['x', { d: 0 }])
-      return fail([10, { d: 0 }])
+      fail([10, { d: 0 }])
     })
 
-    it('throws if pick/drop indexes dont start at 0', function() {
+    it('throws if pick/drop indexes dont start at 0', () => {
       fail([['x', { p: 1 }], ['y', { d: 1 }]])
-      return fail([[10, { p: 1 }], [20, { d: 1 }]])
+      fail([[10, { p: 1 }], [20, { d: 1 }]])
     })
 
     it('throws if a descent starts with an edit', () =>
       fail([10, [{ i: 'hi' }]]))
 
-    it('throws if descents are out of order', function() {
+    it('throws if descents are out of order', () => {
       fail(['x', ['b', { r: {} }], ['a', { r: {} }]])
       fail(['x', [10, { r: {} }], [5, { r: {} }]])
       fail(['x', ['a', { r: {} }], [5, { r: {} }]])
       fail(['x', ['a', { r: {} }], ['a', { r: {} }]])
-      return fail(['x', [10, { r: {} }], [10, { r: {} }]])
+      fail(['x', [10, { r: {} }], [10, { r: {} }]])
     })
 
     it('throws if descents start with the same scalar', () =>
       fail(['x', ['a', { r: {} }], ['a', { e: {} }]]))
 
-    it('throws if descents have two adjacent edits', function() {
+    it('throws if descents have two adjacent edits', () => {
       fail([{ r: {} }, { p: 0 }])
       fail(['x', { r: {} }, { p: 0 }])
-      return fail(['x', { r: {} }, { p: 0 }, 'y', { r: {} }])
+      fail(['x', { r: {} }, { p: 0 }, 'y', { r: {} }])
     })
 
-    it.skip('does not allow ops to overwrite their own inserted data', function() {
+    it.skip('does not allow ops to overwrite their own inserted data', () => {
       fail([{ i: { x: 5 } }, 'x', { i: 6 }])
-      return fail([{ i: ['hi'] }, 0, { i: 'omg' }])
+      fail([{ i: ['hi'] }, 0, { i: 'omg' }])
     })
 
-    it.skip('does not allow immediate data directly parented in other immediate data', function() {
+    it.skip('does not allow immediate data directly parented in other immediate data', () => {
       fail([{ i: {} }, 'x', { i: 5 }])
       fail([{ i: { x: 5 } }, 'x', 'y', { i: 6 }])
-      return fail([{ i: [] }, 0, { i: 5 }])
+      fail([{ i: [] }, 0, { i: 5 }])
     })
 
     it('does not allow the final item to be a single descent', () =>
       fail(['a', ['b', { r: {} }]])) // It should be ['a', 'b', r:{}]
 
-    it('does not allow anything after the descents at the end', function() {
+    it('does not allow anything after the descents at the end', () => {
       fail([[1, { r: {} }], [2, { r: {} }], 5])
       fail([[1, { r: {} }], [2, { r: {} }], 5, { r: {} }])
-      return fail([[1, { r: {} }], [2, { r: {} }], { r: {} }])
+      fail([[1, { r: {} }], [2, { r: {} }], { r: {} }])
     })
 
-    it('allows removes inside removes', function() {
+    it('allows removes inside removes', () => {
       pass(['x', { r: true }, 'y', { r: true }])
       pass(['x', { r: {} }, 'y', { r: true }])
       pass([
         ['x', { r: true }, 'y', { p: 0 }, 'z', { r: true }],
         ['y', { d: 0 }]
       ])
-      return pass([
-        ['x', { r: {} }, 'y', { p: 0 }, 'z', { r: true }],
-        ['y', { d: 0 }]
-      ])
+      pass([['x', { r: {} }, 'y', { p: 0 }, 'z', { r: true }], ['y', { d: 0 }]])
     })
 
-    it('allows inserts inside inserts', function() {
+    it('allows inserts inside inserts', () => {
       pass([1, { i: {} }, 'x', { i: 10 }])
-      return pass([
-        [0, 'x', { p: 0 }],
-        [1, { i: {} }, 'x', { d: 0 }, 'y', { i: 10 }]
-      ])
+      pass([[0, 'x', { p: 0 }], [1, { i: {} }, 'x', { d: 0 }, 'y', { i: 10 }]])
     })
 
-    it.skip('fails if the operation drops items inside something it picked up', function() {
+    it.skip('fails if the operation drops items inside something it picked up', () => {
       fail(['x', { r: true }, 1, { i: 'hi' }])
       fail(['x', { d: 0 }, 1, { p: 0 }])
-      return fail([{ r: true }, 1, { p: 0, d: 0 }])
+      fail([{ r: true }, 1, { p: 0, d: 0 }])
     })
 
-    return describe('edit', function() {
-      it('requires all edits to specify their type', function() {
+    describe('edit', () => {
+      it('requires all edits to specify their type', () => {
         fail([{ e: {} }])
         fail([5, { e: {} }])
-        return pass([{ e: {}, et: 'simple' }])
+        pass([{ e: {}, et: 'simple' }])
       })
 
-      it('allows edits to have null or false for the operation', function() {
+      it('allows edits to have null or false for the operation', () => {
         // These aren't valid operations according to the simple type, but the
         // type doesn't define a checkValidOp so we wouldn't be able to tell
         // anyway.
         pass([{ e: null, et: 'simple' }])
         pass([5, { e: null, et: 'simple' }])
         pass([{ e: false, et: 'simple' }])
-        return pass([5, { e: false, et: 'simple' }])
+        pass([5, { e: false, et: 'simple' }])
       })
 
-      it('does not allow an edit to use an unregistered type', function() {
+      it('does not allow an edit to use an unregistered type', () => {
         fail([{ e: {}, et: 'an undefined type' }])
-        return fail([{ e: null, et: 'an undefined type' }])
+        fail([{ e: null, et: 'an undefined type' }])
       })
 
-      it('does not allow two edits in the same operation', function() {
+      it('does not allow two edits in the same operation', () => {
         fail([{ e: {}, et: 'simple', es: [1, 2, 3] }])
         fail([{ es: [], ena: 5 }])
-        return fail([{ e: {}, et: 'simple', ena: 5 }])
+        fail([{ e: {}, et: 'simple', ena: 5 }])
       })
 
       it('fails if the type is missing', () => fail([{ et: 'missing', e: {} }]))
 
       it('does not allow anything inside an edited subtree')
 
-      it.skip('does not allow an edit inside removed or picked up content', function() {
+      it.skip('does not allow an edit inside removed or picked up content', () => {
         fail([{ r: true }, 1, { es: ['hi'] }])
         pass([1, { r: true }, 1, { es: ['hi'] }])
         fail(['x', { r: true }, 1, { es: ['hi'] }])
@@ -438,35 +411,35 @@ describe('json1', function() {
         fail([['x', { p: 0 }, 1, { es: ['hi'] }], ['y', { d: 0 }]])
 
         // This is actually ok.
-        return pass([0, { p: 0 }, ['a', { es: [], r: true }], ['x', { d: 0 }]])
+        pass([0, { p: 0 }, ['a', { es: [], r: true }], ['x', { d: 0 }]])
       })
 
-      return it.skip('does not allow you to drop inside something that was removed', function() {
+      it.skip('does not allow you to drop inside something that was removed', () => {
         // These insert into the next list item
         pass([[1, { r: true }, 1, { d: 0 }], [2, { p: 0 }]])
         pass([1, { p: 0 }, 'x', { d: 0 }])
 
         // But this is not ok.
-        return fail(['x', { p: 0 }, 'a', { d: 0 }])
+        fail(['x', { p: 0 }, 'a', { d: 0 }])
       })
     })
   })
 
-  describe('normalize', function() {
-    const n = function(opIn, expect) {
+  describe('normalize', () => {
+    const n = (opIn, expect) => {
       if (expect === undefined) {
         expect = opIn
       }
       const op = type.normalize(opIn)
-      return assert.deepStrictEqual(op, expect)
+      assert.deepStrictEqual(op, expect)
     }
 
-    it('does the right thing for noops', function() {
+    it('does the right thing for noops', () => {
       n(null)
-      return n([], null)
+      n([], null)
     })
 
-    it('normalizes some regular ops', function() {
+    it('normalizes some regular ops', () => {
       n([{ i: 'hi' }])
       n([{ i: 'hi' }, 1, 2, 3], [{ i: 'hi' }])
       n([[1, 2, 3, { p: 0 }], [1, 2, 3, { d: 0 }]], [1, 2, 3, { p: 0, d: 0 }])
@@ -474,7 +447,7 @@ describe('json1', function() {
         [[1, 2, 3, { p: 0 }], [1, 2, 30, { d: 0 }]],
         [1, 2, [3, { p: 0 }], [30, { d: 0 }]]
       )
-      return n(
+      n(
         [[1, 2, 30, { p: 0 }], [1, 2, 3, { d: 0 }]],
         [1, 2, [3, { d: 0 }], [30, { p: 0 }]]
       )
@@ -482,46 +455,46 @@ describe('json1', function() {
 
     it('will let you insert null', () => n([{ i: null }]))
 
-    it('normalizes embedded ops when available', function() {
+    it('normalizes embedded ops when available', () => {
       n([{ es: [0, 'hi'] }], [{ es: ['hi'] }])
       n([{ et: 'text-unicode', e: ['hi'] }], [{ es: ['hi'] }])
       n([{ et: 'text-unicode', e: [0, 'hi'] }], [{ es: ['hi'] }])
       n([{ et: 'simple', e: {} }])
       n([{ et: 'number', e: 5 }], [{ ena: 5 }])
-      return n([{ ena: 5 }])
+      n([{ ena: 5 }])
     })
 
-    it.skip('normalizes embedded removes', function() {
+    it.skip('normalizes embedded removes', () => {
       n([1, { r: true }, 2, { r: true }], [1, { r: true }])
-      return n([{ r: true }, 2, { r: true }], [{ r: true }])
+      n([{ r: true }, 2, { r: true }], [{ r: true }])
     })
 
     it('throws if the type is missing', () =>
       // Not sure if this is the best behaviour but ... eh.
       assert.throws(() => n([{ et: 'missing', e: {} }])))
 
-    return it('corrects weird pick and drop ids', () =>
+    it('corrects weird pick and drop ids', () =>
       n([['x', { p: 1 }], ['y', { d: 1 }]], [['x', { p: 0 }], ['y', { d: 0 }]]))
   })
 
   // ****** Apply ******
 
-  describe('apply', function() {
-    it('Can set properties', function() {
+  describe('apply', () => {
+    it('Can set properties', () => {
       apply({
         doc: [],
         op: [0, { i: 17 }],
         expect: [17]
       })
 
-      return apply({
+      apply({
         doc: {},
         op: ['x', { i: 5 }],
         expect: { x: 5 }
       })
     })
 
-    it('can edit the root', function() {
+    it('can edit the root', () => {
       apply({
         doc: { x: 5 },
         op: [{ r: true }],
@@ -554,7 +527,7 @@ describe('json1', function() {
         expect: 5
       })
 
-      return apply({
+      apply({
         doc: { x: 5 },
         op: [{ r: {}, i: [1, 2, 3] }],
         expect: [1, 2, 3]
@@ -626,17 +599,17 @@ describe('json1', function() {
         expect: { y: 'supyooo' }
       }))
 
-    it('throws when the op traverses missing items', function() {
+    it('throws when the op traverses missing items', () => {
       assert.throws(() => type.apply([0, 'hi'], [1, { p: 0 }, 'x', { d: 0 }]))
-      return assert.throws(() => type.apply({}, [{ p: 0 }, 'a', { d: 0 }]))
+      assert.throws(() => type.apply({}, [{ p: 0 }, 'a', { d: 0 }]))
     })
 
-    return it('throws if the type is missing', () =>
+    it('throws if the type is missing', () =>
       assert.throws(() => type.apply({}, [{ et: 'missing', e: {} }])))
   })
 
-  describe('apply path', function() {
-    it('does not modify path when op is unrelated', function() {
+  describe('apply path', () => {
+    it('does not modify path when op is unrelated', () => {
       path(['a', 'b', 'c'], { op: null })
       path(['a', 'b', 'c'], { op: ['x', { i: 5 }] })
       path(['a', 'b', 'c'], { op: ['x', { r: true }] })
@@ -644,26 +617,26 @@ describe('json1', function() {
       path([1, 2, 3], { op: [2, { i: 5 }] })
       path([1, 2, 3], { op: [1, 2, 4, { i: 5 }] })
       path([1], { op: [1, 2, { r: true }] })
-      return path(['x'], { op: ['x', 'y', { r: true }] })
+      path(['x'], { op: ['x', 'y', { r: true }] })
     })
 
-    it('adjusts list indicies', function() {
+    it('adjusts list indicies', () => {
       path([2], { op: [1, { i: 5 }], expect: [3] })
       path([2], { op: [2, { i: 5 }], expect: [3] })
       path([2], { op: [1, { r: true }], expect: [1] })
       path([2], { op: [[1, { p: 0 }], [3, { d: 0 }]], expect: [1] })
       path([2], { op: [[1, { d: 0 }], [3, { p: 0 }]], expect: [3] })
-      return path([2], { op: [[2, { d: 0 }], [3, { p: 0 }]], expect: [3] })
+      path([2], { op: [[2, { d: 0 }], [3, { p: 0 }]], expect: [3] })
     })
 
-    it('returns null when the object at the path was removed', function() {
+    it('returns null when the object at the path was removed', () => {
       path(['x'], { op: [{ r: true }], expect: null })
       path(['x'], { op: ['x', { r: true }], expect: null })
       path([1], { op: [{ r: true }], expect: null })
-      return path([1], { op: [1, { r: true }], expect: null })
+      path([1], { op: [1, { r: true }], expect: null })
     })
 
-    it('moves the path', function() {
+    it('moves the path', () => {
       path(['a', 'z'], {
         op: [['a', { p: 0 }], ['y', { d: 0 }]],
         expect: ['y', 'z']
@@ -676,7 +649,7 @@ describe('json1', function() {
       path([1, 2], { op: [[1, { p: 0 }], [10, { d: 0 }]], expect: [10, 2] })
       path([1, 2], { op: [[1, 2, { p: 0 }], [10, { d: 0 }]], expect: [10] })
       path([1, 2], { op: [1, [1, { d: 0 }], [2, { p: 0 }]], expect: [1, 1] })
-      return path([1, 2], { op: [[1, 2, 3, { p: 0 }], [10, { d: 0 }]] })
+      path([1, 2], { op: [[1, 2, 3, { p: 0 }], [10, { d: 0 }]] })
     })
 
     it('handles pick parent and move', () =>
@@ -691,14 +664,14 @@ describe('json1', function() {
         expect: ['x', 'b', 9]
       }))
 
-    it.skip('gen ops', function() {})
+    it.skip('gen ops', () => {})
     // This should do something like:
     // - Generate a document
     // - Generate op, a random operation
     // - Generate a path to somewhere in the document and an edit we can do there -> op2
     // - Check that transform(op2, op) == op2 at transformPosition(path) or something like that.
 
-    return it('calls transformPosition with embedded string edits if available', function() {
+    it('calls transformPosition with embedded string edits if available', () => {
       // For embedded string operations (and other things that have
       // transformPosition or transformPosition or whatever) we should call that.
       path(['x', 'y', 'z', 1], {
@@ -709,7 +682,7 @@ describe('json1', function() {
         op: ['x', 'y', 'z', { es: ['💃'] }],
         expect: ['x', 'y', 'z', 2]
       })
-      return path(['x', 'y', 'z'], {
+      path(['x', 'y', 'z'], {
         op: ['x', 'y', 'z', { es: ['💃'] }],
         expect: ['x', 'y', 'z']
       })
@@ -718,7 +691,7 @@ describe('json1', function() {
 
   // ******* Compose *******
 
-  describe('compose', function() {
+  describe('compose', () => {
     it('composes empty ops to nothing', () =>
       compose({
         op1: null,
@@ -726,7 +699,7 @@ describe('json1', function() {
         expect: null
       }))
 
-    describe('op1 drop', function() {
+    describe('op1 drop', () => {
       it('vs remove', () =>
         compose({
           op1: [['x', { p: 0 }], ['y', { d: 0 }]],
@@ -762,7 +735,7 @@ describe('json1', function() {
           expect: [['x', { p: 0 }], ['z', { d: 0 }]]
         }))
 
-      return it('is transformed by op2 picks', () =>
+      it('is transformed by op2 picks', () =>
         compose({
           op1: [['x', { p: 0 }], ['y', 10, { d: 0 }]],
           op2: ['y', 0, { r: true }],
@@ -770,7 +743,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('op1 insert', function() {
+    describe('op1 insert', () => {
       it('vs remove', () =>
         compose({
           op1: ['x', { i: { a: 'hi' } }],
@@ -863,7 +836,7 @@ describe('json1', function() {
           expect: [{ i: 'hi', es: [2, ' there'] }]
         }))
 
-      return it('vs op2 number edit', () =>
+      it('vs op2 number edit', () =>
         compose({
           op1: [{ i: 10 }],
           op2: [{ ena: 20 }],
@@ -871,7 +844,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('op1 edit', function() {
+    describe('op1 edit', () => {
       it('removes the edit if the edited object is deleted', () =>
         compose({
           op1: ['x', { es: ['hi'] }],
@@ -928,7 +901,7 @@ describe('json1', function() {
           expect: ['x', { r: true, i: 'yo', es: [2, ' there'] }]
         }))
 
-      return it('throws if the type is missing', () =>
+      it('throws if the type is missing', () =>
         assert.throws(() =>
           type.compose(
             [{ et: 'missing', e: {} }],
@@ -960,7 +933,7 @@ describe('json1', function() {
           expect: [[0, { p: 0 }, 'x', 1, { d: 0 }], [1, 'x', 0, { r: true }]]
         })))
 
-    describe('setnull interaction', function() {
+    describe('setnull interaction', () => {
       // Currently failing.
       it('reorders items inside a setnull region', () =>
         compose({
@@ -976,7 +949,7 @@ describe('json1', function() {
           expect: [['list', { i: [] }], ['z', { i: 'hi' }]]
         }))
 
-      return it('lets a setnull child get modified', () =>
+      it('lets a setnull child get modified', () =>
         compose({
           op1: [{ i: [] }, 0, { i: ['a'] }],
           op2: [0, 0, { r: 'a', i: 'b' }],
@@ -985,7 +958,7 @@ describe('json1', function() {
     })
     //expect: [{i:[]}, 0, {i:['b']}] # Maybe better??
 
-    return describe('regression', function() {
+    describe('regression', () => {
       it('skips op2 drops when calculating op1 drop index simple', () =>
         compose({
           op1: [[0, { p: 0 }], [2, { d: 0 }]],
@@ -1009,7 +982,7 @@ describe('json1', function() {
           expect: [{ i: [[]] }, [0, { i: '' }], [1, 0, { i: null }]]
         }))
 
-      return it('4', () =>
+      it('4', () =>
         compose({
           // This one triggered a bug in cursor!
           op1: [0, [0, ['a', { r: true }], ['b', { d: 0 }]], [2, { p: 0 }]],
@@ -1024,8 +997,8 @@ describe('json1', function() {
   })
 
   // *** Old stuff
-  describe('old compose', function() {
-    it('gloms together unrelated edits', function() {
+  describe('old compose', () => {
+    it('gloms together unrelated edits', () => {
       compose({
         op1: [['a', { p: 0 }], ['b', { d: 0 }]],
         op2: [['x', { p: 0 }], ['y', { d: 0 }]],
@@ -1037,7 +1010,7 @@ describe('json1', function() {
         ]
       })
 
-      return compose({
+      compose({
         op1: [2, { i: 'hi' }],
         op2: [0, 'x', { r: true }],
         expect: [[0, 'x', { r: true }], [2, { i: 'hi' }]]
@@ -1076,7 +1049,7 @@ describe('json1', function() {
         expect: [['x', { i: { b: 2, c: 3 } }], ['y', { i: 1 }]]
       }))
 
-    return it('does not merge mutual inserts', () =>
+    it('does not merge mutual inserts', () =>
       compose({
         op1: [{ i: {} }],
         op2: ['x', { i: 'hi' }],
@@ -1090,8 +1063,8 @@ describe('json1', function() {
 
   // ****** Transform ******
 
-  describe('transform', function() {
-    describe('op1 pick', function() {
+  describe('transform', () => {
+    describe('op1 pick', () => {
       it('vs delete', () =>
         xf({
           op1: [['x', { p: 0 }], ['y', { d: 0 }]],
@@ -1198,7 +1171,7 @@ describe('json1', function() {
           expectRight: null
         }))
 
-      return it('vs pick, edit', () => ({
+      it('vs pick, edit', () => ({
         op1: [['x', { p: 0 }], ['z', { d: 0 }]],
         op2: [['x', { es: ['hi'], p: 0 }], ['y', { d: 0 }]],
         expectLeft: [['y', { p: 0 }], ['z', { d: 0 }]],
@@ -1206,7 +1179,7 @@ describe('json1', function() {
       }))
     })
 
-    describe('op1 delete', function() {
+    describe('op1 delete', () => {
       it('vs delete', () =>
         xf({
           op1: ['x', { r: true }],
@@ -1304,7 +1277,7 @@ describe('json1', function() {
             expect: [['x', { r: true }], ['z', { r: true }, 'a', { r: true }]]
           }))
 
-        return it('mess', () =>
+        it('mess', () =>
           xf({
             // yeesh
             op1: [['x', { r: true }, 'y', 'z', { p: 0 }], ['z', { d: 0 }]],
@@ -1318,7 +1291,7 @@ describe('json1', function() {
       })
     })
 
-    describe('op1 drop', function() {
+    describe('op1 drop', () => {
       it('vs delete parent', () =>
         xf({
           op1: [['x', { p: 0 }], ['y', 'a', { d: 0 }]],
@@ -1432,7 +1405,7 @@ describe('json1', function() {
             expectRight: null
           }))
 
-        return it('multiple', () =>
+        it('multiple', () =>
           xf({
             // a->x.a, b->x.b
             op1: [
@@ -1451,7 +1424,7 @@ describe('json1', function() {
       })
     })
 
-    describe('op1 insert', function() {
+    describe('op1 insert', () => {
       it('vs delete parent', () =>
         xf({
           op1: ['y', 'a', { i: 5 }],
@@ -1533,7 +1506,7 @@ describe('json1', function() {
         })
       })
 
-      return it('with embedded edits', () =>
+      it('with embedded edits', () =>
         xf({
           op1: [{ i: '', es: ['aaa'] }],
           op2: [{ i: '', es: ['bbb'] }],
@@ -1542,7 +1515,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('op1 edit', function() {
+    describe('op1 edit', () => {
       it('vs delete', () =>
         xf({
           op1: ['x', { es: ['hi'] }],
@@ -1592,7 +1565,7 @@ describe('json1', function() {
           expectRight: ['y', { es: [2, 'ab'] }]
         }))
 
-      return it('throws if the type is missing', () =>
+      it('throws if the type is missing', () =>
         assert.throws(() =>
           type.transform(
             [{ et: 'missing', e: {} }],
@@ -1602,7 +1575,7 @@ describe('json1', function() {
         ))
     })
 
-    describe('op2 cancel move', function() {
+    describe('op2 cancel move', () => {
       it('and insert', () =>
         xf({
           op1: ['x', { r: true }],
@@ -1614,7 +1587,7 @@ describe('json1', function() {
           expect: [['x', { r: true }], ['y', { r: true }, 'b', { r: true }]]
         }))
 
-      return it('and another move (rm x vs x.a -> y, q -> y.b)', () =>
+      it('and another move (rm x vs x.a -> y, q -> y.b)', () =>
         xf({
           op1: ['x', { r: true }],
           op2: [
@@ -1630,7 +1603,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('op2 list move an op1 drop', function() {
+    describe('op2 list move an op1 drop', () => {
       it('vs op1 remove', () =>
         xf({
           op1: [[0, { r: true }, 'a', { i: 'hi' }], [5, { r: true }]],
@@ -1660,7 +1633,7 @@ describe('json1', function() {
           expect: [[0, { i: 'a' }], [1, { i: 'b' }], [3, 'a', { i: 'hi' }]]
         }))
 
-      return it('vs op1 insert before and replace', () =>
+      it('vs op1 insert before and replace', () =>
         xf({
           op1: [[0, { i: 'xx' }, 'a', { r: true }], [1, 'a', { i: 'hi' }]],
           op2: [[0, { p: 0 }], [3, { d: 0 }]],
@@ -1672,8 +1645,8 @@ describe('json1', function() {
         }))
     })
 
-    return describe('list', () =>
-      describe('drop', function() {
+    describe('list', () =>
+      describe('drop', () => {
         it('transforms by p1 drops', () =>
           xf({
             op1: [[5, { i: 5 }], [10, { i: 10 }]],
@@ -1684,12 +1657,12 @@ describe('json1', function() {
 
         it('transforms by p1 picks')
         it('transforms by p2 picks')
-        return it('transforms by p2 drops')
+        it('transforms by p2 drops')
       }))
   })
 
-  describe('conflicts', function() {
-    describe('drop into remove / rm unexpected', function() {
+  describe('conflicts', () => {
+    describe('drop into remove / rm unexpected', () => {
       // xfConflict does both xf(op1, op2, left) and xf(op2, op1, right), and
       // uses invConflict. So this also tests RM_UNEXPECTED_CONTENT with each
       // test case.
@@ -1743,7 +1716,7 @@ describe('json1', function() {
           expectRight: null
         }))
 
-      return it.skip('returns symmetric errors when both ops delete the other', () =>
+      it.skip('returns symmetric errors when both ops delete the other', () =>
         xf({
           // The problem here is that there's two conflicts we want to return.
           // Which one should be returned first? It'd be nice for the order of
@@ -1757,7 +1730,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('overlapping drop', function() {
+    describe('overlapping drop', () => {
       it('errors if two ops insert different content into the same place in an object', () =>
         xf({
           op1: ['x', { i: 'hi' }],
@@ -1827,7 +1800,7 @@ describe('json1', function() {
           expectRight: ['a', { r: true }]
         }))
 
-      return it('errors if the two sides insert in the vacuum', () =>
+      it('errors if the two sides insert in the vacuum', () =>
         xf({
           op1: [['a', { p: 0 }], ['b', { d: 0 }], ['c', { i: 5 }]],
           op2: [['a', { p: 0 }], ['b', { i: 6 }], ['c', { d: 0 }]],
@@ -1846,7 +1819,7 @@ describe('json1', function() {
         }))
     })
 
-    describe('discarded edit', function() {
+    describe('discarded edit', () => {
       it('edit removed directly', () =>
         xf({
           op1: ['a', { es: [] }],
@@ -1855,7 +1828,7 @@ describe('json1', function() {
           expect: null
         }))
 
-      return it('edit inside new content throws RM_UNEXPECTED_CONTENT', () =>
+      it('edit inside new content throws RM_UNEXPECTED_CONTENT', () =>
         xf({
           op1: ['a', 'b', { i: 'hi', es: [] }],
           op2: ['a', { r: true }],
@@ -1867,7 +1840,7 @@ describe('json1', function() {
         }))
     })
 
-    return describe('blackhole', function() {
+    describe('blackhole', () => {
       it('detects and errors', () =>
         xf({
           op1: [['x', { p: 0 }], ['y', 'a', { d: 0 }]],
@@ -1942,7 +1915,7 @@ describe('json1', function() {
           ]
         }))
 
-      return it('creates conflict return values with valid slot ids', () =>
+      it('creates conflict return values with valid slot ids', () =>
         xf({
           op1: [
             ['a', { p: 0 }],
@@ -1964,7 +1937,7 @@ describe('json1', function() {
     })
   })
 
-  describe('transform-old', function() {
+  describe('transform-old', () => {
     it('foo', () =>
       xf({
         op1: [
@@ -1994,7 +1967,7 @@ describe('json1', function() {
           expectRight: null
         }))) // the object was moved fair and square.
 
-    describe('deletes', function() {
+    describe('deletes', () => {
       it.skip('delete parent of a move', () =>
         xf({
           // The current logic of transform actually just burns everything (in a
@@ -2011,7 +1984,7 @@ describe('json1', function() {
         })) // TODO: It would be better to do this in both cases.
       //expectRight: ['x', r:true]
 
-      return it('awful delete nonsense', function() {
+      it('awful delete nonsense', () => {
         xf({
           op1: [['x', { r: true }], ['y', { i: 'hi' }]], // delete doc.x, insert doc.y
           op2: [['x', 'a', { p: 0 }], ['y', { d: 0 }]], // move doc.x.a -> doc.y
@@ -2024,7 +1997,7 @@ describe('json1', function() {
           expect: null
         })
 
-        return xf({
+        xf({
           op1: [10, { r: true }],
           op2: [[5, { d: 0 }], [10, 1, { p: 0 }]],
           expect: [[5, { r: true }], [11, { r: true }]]
@@ -2033,7 +2006,7 @@ describe('json1', function() {
     })
     // And how do those indexes interact with pick / drop operations??
 
-    describe('swap', function() {
+    describe('swap', () => {
       const swap = [
         ['a', { p: 0 }, 'b', { p: 1 }],
         ['b', { d: 1 }, 'a', { d: 0 }]
@@ -2046,7 +2019,7 @@ describe('json1', function() {
           expect: null
         }))
 
-      return it('can swap two edits', () =>
+      it('can swap two edits', () =>
         xf({
           op1: ['a', { es: ['a edit'] }, 'b', { es: ['b edit'] }],
           op2: swap,
@@ -2054,8 +2027,8 @@ describe('json1', function() {
         }))
     })
 
-    describe('lists', function() {
-      it('can rewrite simple list indexes', function() {
+    describe('lists', () => {
+      it('can rewrite simple list indexes', () => {
         xf({
           op1: [10, { es: ['edit'] }],
           op2: [0, { i: 'oh hi' }],
@@ -2068,7 +2041,7 @@ describe('json1', function() {
           expect: [11, { r: true }]
         })
 
-        return xf({
+        xf({
           op1: [10, { i: {} }],
           op2: [0, { i: 'oh hi' }],
           expect: [11, { i: {} }]
@@ -2096,14 +2069,14 @@ describe('json1', function() {
           expect: [0, { r: true, i: 'hi' }]
         }))
 
-      it('list drop vs delete uses the correct result index', function() {
+      it('list drop vs delete uses the correct result index', () => {
         xf({
           op1: [2, { i: 'hi' }],
           op2: [2, { r: true }],
           expect: [2, { i: 'hi' }]
         })
 
-        return xf({
+        xf({
           op1: [3, { i: 'hi' }],
           op2: [2, { r: true }],
           expect: [2, { i: 'hi' }]
@@ -2118,7 +2091,7 @@ describe('json1', function() {
           expectRight: [3, { i: 'hi' }]
         }))
 
-      it('list drop vs delete and drop', function() {
+      it('list drop vs delete and drop', () => {
         xf({
           op1: [2, { i: 'hi' }],
           op2: [2, { r: true, i: 'other' }],
@@ -2132,7 +2105,7 @@ describe('json1', function() {
           expect: [2, { i: 'hi' }]
         })
 
-        return xf({
+        xf({
           op1: [4, { i: 'hi' }],
           op2: [[2, { r: true }], [3, { i: 'other' }]],
           expectLeft: [3, { i: 'hi' }],
@@ -2140,7 +2113,7 @@ describe('json1', function() {
         })
       })
 
-      it('list delete vs drop', function() {
+      it('list delete vs drop', () => {
         xf({
           op1: [1, { r: true }],
           op2: [2, { i: 'hi' }],
@@ -2153,7 +2126,7 @@ describe('json1', function() {
           expect: [3, { r: true }]
         })
 
-        return xf({
+        xf({
           op1: [3, { r: true }],
           op2: [2, { i: 'hi' }],
           expect: [4, { r: true }]
@@ -2221,7 +2194,7 @@ describe('json1', function() {
           op2: [1, { r: true }]
         }))
 
-      return it('xxxxx 2', () =>
+      it('xxxxx 2', () =>
         diamond({
           doc: Array.from('abcdef'),
           op1: [[1, { p: 0, i: 'AAA' }], [3, { d: 0 }], [5, { i: 'CCC' }]],
@@ -2229,7 +2202,7 @@ describe('json1', function() {
         }))
     })
 
-    return describe('edit', function() {
+    describe('edit', () => {
       it('transforms edits by one another', () =>
         xf({
           op1: [1, { es: [2, 'hi'] }],
@@ -2259,7 +2232,7 @@ describe('json1', function() {
           expect: [2, { es: [4, 'hi'] }]
         }))
 
-      return it('an edit on a deleted object goes away', () =>
+      it('an edit on a deleted object goes away', () =>
         xf({
           op1: [1, { es: [2, 'hi'] }],
           op2: [1, { r: 'yo' }],
@@ -2275,7 +2248,7 @@ describe('json1', function() {
   // TODO Numbers
 
   // ***** Test cases found by the fuzzer which have caused issues
-  return describe('fuzzer tests', function() {
+  describe('fuzzer tests', () => {
     it('asdf', () =>
       apply({
         doc: { the: '', Twas: 'the' },
@@ -2315,14 +2288,14 @@ describe('json1', function() {
         expectRight: null
       }))
 
-    it('inserts before edits', function() {
+    it('inserts before edits', () => {
       xf({
         op1: [0, 'x', { i: 5 }],
         op2: [0, { i: 35 }],
         expect: [1, 'x', { i: 5 }]
       })
 
-      return xf({
+      xf({
         op1: [0, { es: [] }],
         op2: [0, { i: 35 }],
         expect: [1, { es: [] }]
@@ -2355,7 +2328,7 @@ describe('json1', function() {
         })
     )
 
-    it('p1 pick descends correctly', function() {
+    it('p1 pick descends correctly', () => {
       xf({
         op1: [2, { r: true }, 1, { es: ['hi'] }],
         op2: [3, 1, { r: true }],
@@ -2366,7 +2339,7 @@ describe('json1', function() {
         expect: [2, { r: true }]
       })
 
-      return xf({
+      xf({
         op1: [[2, { r: true }, 1, { es: ['hi'] }], [3, 1, { r: true }]],
         op2: [3, 2, { r: true }],
         conflict: {
@@ -2555,14 +2528,14 @@ describe('json1', function() {
         expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
       }))
 
-    it('composes simple regression', function() {
+    it('composes simple regression', () => {
       compose({
         op1: [0, { p: 0, d: 0 }],
         op2: [{ r: true }],
         expect: [{ r: true }, 0, { r: true }]
       })
 
-      return compose({
+      compose({
         op1: ['a', 1, { r: true }],
         op2: ['a', { r: true }],
         expect: ['a', { r: true }, 1, { r: true }]
@@ -2707,7 +2680,7 @@ describe('json1', function() {
         expect: ['a', { r: true }, ['aa', { r: true }], ['bb', { r: true }]]
       })) // Also ok if we miss the second rs.
 
-    it('op2 moves into op1 remove edge cases', function() {
+    it('op2 moves into op1 remove edge cases', () => {
       // Sorry not minified.
       xf({
         op1: [
@@ -2740,7 +2713,7 @@ describe('json1', function() {
         ]
       })
 
-      return xf({
+      xf({
         op1: [[0, [1, { p: 0 }], [2, { r: true }]], [1, 'xxx', { d: 0 }]],
         op2: [0, 1, { i: {}, p: 0 }, 'b', { d: 0 }],
         expectLeft: [
@@ -2776,7 +2749,7 @@ describe('json1', function() {
         expect: [0, { r: true }, 'x', { r: true }]
       }))
 
-    it('does not conflict when removed target gets moved inside removed container', function() {
+    it('does not conflict when removed target gets moved inside removed container', () => {
       // This edge case is interesting because we don't generate the same
       // conflicts on left and right. We want our move of a.x to escape the
       // object before removing it, but when we're right, the other operation's
@@ -2803,7 +2776,10 @@ describe('json1', function() {
         expectRight: ['a', { r: true }, 0, { r: true }]
       })
 
-      return { expect: [['a', { r: true }, 0, { p: 0 }], ['b', { d: 0 }]] }
+      // TODO have a look at this - doesn't seem right to just define an object
+      {
+        expect: [['a', { r: true }, 0, { p: 0 }], ['b', { d: 0 }]]
+      }
     })
 
     it('compose copies op2 edit data', () =>
@@ -3067,7 +3043,7 @@ describe('json1', function() {
         expect: ['b', { r: true }, 'y', { r: true }]
       }))
 
-    return it('handles overlapping pick in blackholes', () =>
+    it('handles overlapping pick in blackholes', () =>
       xf({
         // This looks complicated, but its really not so bad. Its:
         // a->b.0, a.x -> z
