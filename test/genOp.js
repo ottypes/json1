@@ -1,14 +1,5 @@
-/*
- * decaffeinate suggestions:
- * DS101: Remove unnecessary use of Array.from
- * DS102: Remove unnecessary code created because of implicit returns
- * DS202: Simplify dynamic range loops
- * DS207: Consider shorter variations of null checks
- * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
- */
 let genRandomOp
 const { randomInt, randomReal, randomWord } = require('ot-fuzzer')
-// require 'ot-fuzzer'
 
 const assert = require('assert')
 const { writeCursor } = require('../lib/cursor')
@@ -18,36 +9,22 @@ const { type } = require('../lib/json1')
 // This is an awful function to clone a document snapshot for use by the random
 // op generator. .. Since we don't want to corrupt the original object with
 // the changes the op generator will make.
-const clone = function(o) {
-  if (typeof o === 'object') {
-    return JSON.parse(JSON.stringify(o))
-  } else {
-    return o
-  }
-}
+const clone = o => (typeof o === 'object' ? JSON.parse(JSON.stringify(o)) : o)
 
-const randomKey = function(obj) {
+const randomKey = obj => {
   // this works on arrays too!
   if (Array.isArray(obj)) {
-    if (obj.length === 0) {
-      return undefined
-    } else {
-      return randomInt(obj.length)
-    }
+    return obj.length === 0 ? undefined : randomInt(obj.length)
   } else {
     const keys = Object.keys(obj)
-    if (keys.length === 0) {
-      return undefined
-    } else {
-      return keys[randomInt(keys.length)]
-    }
+    return keys.length === 0 ? undefined : keys[randomInt(keys.length)]
   }
 }
 
 const letters = 'abxyz'
 
 // Generate a random new key for a value in obj.
-const randomNewKey = function(obj) {
+const randomNewKey = obj => {
   if (Array.isArray(obj)) {
     return randomInt(obj.length + 1)
   } else {
@@ -65,7 +42,7 @@ const randomNewKey = function(obj) {
 }
 
 // Generate a random object
-var randomThing = function() {
+const randomThing = () => {
   switch (randomInt(7)) {
     case 0:
       return null
@@ -74,7 +51,7 @@ var randomThing = function() {
     case 2:
       return randomWord()
     case 3:
-      var obj = {}
+      const obj = {}
       for (
         let i = 1, end = randomInt(2), asc = 1 <= end;
         asc ? i <= end : i >= end;
@@ -93,7 +70,7 @@ var randomThing = function() {
 }
 
 // Pick a random path to something in the object.
-const randomPath = function(data) {
+const randomPath = data => {
   if (data == null || typeof data !== 'object') {
     return []
   }
@@ -112,11 +89,10 @@ const randomPath = function(data) {
   return path
 }
 
-const randomWalkPick = function(w, container) {
+const randomWalkPick = (w, container) => {
   const path = randomPath(container.data)
   let parent = container
   let key = 'data'
-  //log 'rwp', container, path, parent
 
   for (let p of Array.from(path)) {
     parent = parent[key]
@@ -127,16 +103,16 @@ const randomWalkPick = function(w, container) {
   return [path, parent, key, operand]
 }
 
-// Returns [path, parent, key] if we can drop here, or null if no drop is
-// possible
-const randomWalkDrop = function(w, container) {
+// Returns [path, parent, key] if we can drop here,
+// or null if no drop is possible
+const randomWalkDrop = (w, container) => {
   if (container.data === undefined) {
     return [[], container, 'data']
   } else if (typeof container.data !== 'object' || container.data === null) {
     return null // Can't insert into a document that is a string or number
   }
 
-  let [path, parent, key, operand] = Array.from(randomWalkPick(w, container))
+  let [path, parent, key, operand] = randomWalkPick(w, container)
   if (typeof operand === 'object' && operand !== null) {
     parent = operand
   } else {
@@ -145,27 +121,19 @@ const randomWalkDrop = function(w, container) {
     path.pop()
   }
   key = randomNewKey(parent)
-  // log 'key', key
   return [path, parent, key]
 }
 
-const set = function(container, key, value) {
-  if (value === undefined) {
-    if (Array.isArray(container)) {
-      return container.splice(key, 1)
-    } else {
-      return delete container[key]
-    }
-  } else {
-    if (Array.isArray(container)) {
-      return container.splice(key, 0, value)
-    } else {
-      return (container[key] = value)
-    }
-  }
-}
+const set = (container, key, value) =>
+  value === undefined
+    ? Array.isArray(container)
+      ? container.splice(key, 1)
+      : delete container[key]
+    : Array.isArray(container)
+    ? container.splice(key, 0, value)
+    : (container[key] = value)
 
-const genRandomOpPart = function(data) {
+const genRandomOpPart = data => {
   // log 'genRandomOp', data
 
   let key1, parent1, path1
@@ -185,14 +153,12 @@ const genRandomOpPart = function(data) {
   switch (mode) {
     case 0:
     case 1:
-      var [path, parent, key, operand] = Array.from(
-        randomWalkPick(w, container)
-      )
+      const [path, parent, key, operand] = randomWalkPick(w, container)
       //log 'ppko', path, parent, key, operand
       if (mode === 1 && typeof operand === 'string') {
         // Edit it!
         const genString = require('ot-text/test/genOp')
-        const [stringOp, result] = Array.from(genString(operand))
+        const [stringOp, result] = genString(operand)
         w.write('es', stringOp)
         parent[key] = result
       } else if (mode === 1 && typeof operand === 'number') {
@@ -210,9 +176,9 @@ const genRandomOpPart = function(data) {
 
     case 2:
       // insert something
-      var walk = randomWalkDrop(w, container)
+      const walk = randomWalkDrop(w, container)
       if (walk !== null) {
-        ;[path, parent, key] = Array.from(walk)
+        const [path, parent, key] = walk
         //log 'walk', walk
         const val = randomThing()
         if (parent !== container) {
@@ -225,10 +191,8 @@ const genRandomOpPart = function(data) {
 
     case 3:
       // Move something. We'll pick up the current operand...
-      ;[path1, parent1, key1, operand] = Array.from(
-        randomWalkPick(w, container)
-      )
-      if (operand !== undefined) {
+      const [path1, parent1, key1, operand1] = randomWalkPick(w, container)
+      if (operand1 !== undefined) {
         set(parent1, key1, undefined) // remove it from the result...
 
         if (parent1 === container) {
@@ -250,7 +214,7 @@ const genRandomOpPart = function(data) {
             randomWalkDrop(w, container)
           )
           w.descend(key2)
-          set(parent2, key2, operand)
+          set(parent2, key2, operand1)
           w.write('d', 0)
         }
       }
@@ -267,7 +231,7 @@ const genRandomOpPart = function(data) {
   return [op, doc]
 }
 
-module.exports = genRandomOp = function(doc) {
+module.exports = genRandomOp = doc => {
   doc = clone(doc)
 
   // 90% chance of adding an op the first time through, then 50% each successive time.
@@ -277,14 +241,13 @@ module.exports = genRandomOp = function(doc) {
 
   while (randomReal() < chance) {
     let opc
-    ;[opc, doc] = Array.from(genRandomOpPart(doc))
+    ;[opc, doc] = genRandomOpPart(doc)
     log(opc)
     // type.setDebug false
     op = type.compose(
       op,
       opc
     )
-
     chance = 0.5
   }
 
@@ -305,9 +268,9 @@ if (require.main === module) {
 // log genRandomOp(undefined)
 
 function __range__(left, right, inclusive) {
-  let range = []
-  let ascending = left < right
-  let end = !inclusive ? right : ascending ? right + 1 : right - 1
+  const range = []
+  const ascending = left < right
+  const end = !inclusive ? right : ascending ? right + 1 : right - 1
   for (let i = left; ascending ? i < end : i > end; ascending ? i++ : i--) {
     range.push(i)
   }
