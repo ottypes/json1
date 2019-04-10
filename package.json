@@ -8,7 +8,6 @@
     "ot-text-unicode": "^3.0.0"
   },
   "devDependencies": {
-    "coffeescript": "^2.3.2",
     "mocha": "^5.2.0",
     "ot-fuzzer": "^1.1.0",
     "ot-simple": "^1.0.0",
@@ -16,7 +15,7 @@
     "terser": "^3.11.0"
   },
   "scripts": {
-    "test": "mocha test/cursor.coffee test/test.coffee test/immutable.coffee",
+    "test": "mocha test/cursor.js test/test.js test/immutable.js",
     "fuzzer": "node test/fuzzer.js",
     "prepare": "terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < lib/json1.js > lib/json1.release.js"
   },
