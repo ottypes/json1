@@ -1,10 +1,8 @@
-require('coffeescript/register')
-
 const assert = require('assert')
 // const {type} = require('../index')
-const {type} = require('../lib/json1')
+const { type } = require('../lib/json1')
 
-const run = module.exports = () => {
+const run = (module.exports = () => {
   // require('./lib/log').quiet = true
   // type.debug = true
   const fuzzer = require('ot-fuzzer')
@@ -15,6 +13,6 @@ const run = module.exports = () => {
   // const tracer = require('./tracer')(_t, genOp)
   //fuzzer(tracer, tracer.genOp, 100000)
   fuzzer(_t, genOp, 10000000)
-}
+})
 
 if (require.main === module) run()
