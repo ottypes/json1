@@ -9,11 +9,11 @@
   },
   "devDependencies": {
     "coffeescript": "^2.4.1",
-    "mocha": "^5.2.0",
+    "mocha": "^7.1.1",
     "ot-fuzzer": "^1.1.0",
     "ot-simple": "^1.0.0",
     "ot-text": "^1.0.2",
-    "terser": "^3.11.0"
+    "terser": "^4.6.7"
   },
   "scripts": {
     "test": "mocha test/cursor.js test/test.js test/immutable.js",
