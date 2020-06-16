@@ -4,7 +4,7 @@ const { randomInt, randomReal, randomWord } = require('ot-fuzzer')
 const assert = require('assert')
 const { writeCursor } = require('../dist/cursor')
 const log = require('../dist/log').default
-const { type } = require('../dist/json1')
+const { type } = require('..')
 
 // This is an awful function to clone a document snapshot for use by the random
 // op generator. .. Since we don't want to corrupt the original object with
