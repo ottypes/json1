@@ -1,6 +1,6 @@
-module.exports = deepEqual
+import { Doc } from "./types"
 
-function eqObj(a, b) {
+function eqObj(a: {[k: string]: Doc}, b: Doc[] | {[k: string]: Doc}) {
   if (Array.isArray(b)) return false
 
   for (let k in a) {
@@ -12,7 +12,7 @@ function eqObj(a, b) {
   return true
 }
 
-function eqArr(a, b) {
+function eqArr(a: Doc[], b: Doc) {
   if (!Array.isArray(b)) return false
   if (a.length !== b.length) return false
 
@@ -23,7 +23,7 @@ function eqArr(a, b) {
   return true
 }
 
-function deepEqual(a, b) {
+export default function deepEqual(a: Doc, b: Doc) {
   // This will cover null, bools, string and number
   if (a === b) return true
   if (a === null || b === null) return false
@@ -31,4 +31,3 @@ function deepEqual(a, b) {
 
   return Array.isArray(a) ? eqArr(a, b) : eqObj(a, b)
 }
-

@@ -6,9 +6,9 @@
 // Cleanups welcome, so long as you don't remove any tests.
 
 const assert = require('assert')
-const { type } = require('../lib/json1')
-const log = require('../lib/log')
-const deepClone = require('../lib/deepClone')
+const { type } = require('../dist/json1')
+const log = require('../dist/log').default
+const deepClone = require('../dist/deepClone').default
 
 const { transform } = type
 const { DROP_COLLISION, RM_UNEXPECTED_CONTENT, BLACKHOLE } = type
@@ -3073,6 +3073,16 @@ describe('json1', () => {
           op1: [['a', { p: 0 }], ['b', 0, { d: 0 }]]
         },
         expectRight: ['a', { r: true }, ['x', { r: true }], ['y', { r: true }]]
+      }))
+
+    it('descends into a string correctly in apply', () =>
+      apply({
+        doc: { y: 'omg', z: [ 1, 'whoa', 3 ] },
+        op: [
+          [ 'y', { i: [0], r: true }, 0, { i: 16 } ],
+          [ 'z', { r: true } ]
+        ],
+        expect: { y: [ 16, 0 ] }
       }))
   })
 })

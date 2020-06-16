@@ -2,23 +2,27 @@
   "name": "ot-json1",
   "version": "0.2.4",
   "description": "JSON OT type",
-  "main": "lib/json1.release.js",
-  "types": "types.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "dependencies": {
     "ot-text-unicode": "^3.0.0"
   },
   "devDependencies": {
-    "coffeescript": "^2.4.1",
+    "@types/node": "^14.0.13",
     "mocha": "^7.1.1",
     "ot-fuzzer": "^1.1.0",
     "ot-simple": "^1.0.0",
-    "ot-text": "^1.0.2",
-    "terser": "^4.6.7"
+    "terser": "^4.6.7",
+    "typescript": "^3.9.5"
   },
   "scripts": {
     "test": "mocha test/cursor.js test/test.js test/immutable.js",
     "fuzzer": "node test/fuzzer.js",
-    "prepare": "terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < lib/json1.js > lib/json1.release.js"
+    "prepare": "npx tsc && terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < lib/json1.js > lib/json1.release.js"
+  },
+  "mocha": {
+    "checkLeaks": true,
+    "reporter": "spec"
   },
   "files": [
     "lib/",

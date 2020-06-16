@@ -1,15 +1,15 @@
 const assert = require('assert')
-const { type } = require('../lib/json1')
-const log = require('../lib/log')
+const { type } = require('../dist/json1.release')
+const log = require('../dist/log').default
 const genOp = require('./genOp')
-const deepClone = require('../lib/deepClone')
+const deepClone = require('../dist/deepClone').default
 
 // This tests that none of apply / compose / transform / genOp mutate their input
 describe('immutable guarantees', function() {
   const origDoc = { x: 'hi', y: 'omg', z: [1, 'whoa', 3] }
   const expectDoc = deepClone(origDoc)
   const n = 1000
-  this.slow(n * 10)
+  this.slow(n * 100)
 
   it('apply does not mutate', () => {
     const result = []
@@ -22,7 +22,17 @@ describe('immutable guarantees', function() {
       assert.deepStrictEqual(origDoc, expectDoc)
 
       const expectOp = deepClone(op)
-      type.apply(origDoc, op)
+      try {
+        type.apply(origDoc, op)
+      } catch (e) {
+        console.log(
+          [
+            'Apply failed! Repro ',
+            `apply( ${JSON.stringify(origDoc)}, ${JSON.stringify(op)} )`
+          ].join('')
+        )
+        throw e
+      }
 
       assert.deepStrictEqual(origDoc, expectDoc)
       result.push(assert.deepStrictEqual(op, expectOp))

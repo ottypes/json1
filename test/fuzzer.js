@@ -1,6 +1,6 @@
 const assert = require('assert')
 // const {type} = require('../index')
-const { type } = require('../lib/json1')
+const { type } = require('../dist/json1')
 
 const run = (module.exports = () => {
   // require('./lib/log').quiet = true

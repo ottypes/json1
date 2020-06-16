@@ -1,3 +1,0 @@
--r coffeescript/register
---reporter spec
---check-leaks

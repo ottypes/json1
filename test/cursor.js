@@ -1,4 +1,4 @@
-const { writeCursor, readCursor } = require('../lib/cursor')
+const { writeCursor, readCursor } = require('../dist/cursor')
 const assert = require('assert')
 
 const data = require('fs')
