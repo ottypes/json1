@@ -25,8 +25,9 @@
     "reporter": "spec"
   },
   "files": [
+    "dist/",
     "lib/",
-    "types.d.ts"
+    "test/genOp.js"
   ],
   "repository": {
     "type": "git",
