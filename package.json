@@ -18,7 +18,7 @@
   "scripts": {
     "test": "mocha test/cursor.js test/test.js test/immutable.js",
     "fuzzer": "node test/fuzzer.js",
-    "prepare": "rm -rf dist && npx tsc && terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b < dist/json1.js > dist/json1.release.js"
+    "prepare": "rm -rf dist && npx tsc && terser -d process.env.JSON1_RELEASE_MODE=true -c pure_funcs=log,keep_fargs=false,passes=2 -b --source-map url -o dist/json1.release.js -- dist/json1.js"
   },
   "mocha": {
     "checkLeaks": true,
