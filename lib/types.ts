@@ -1,8 +1,7 @@
 import {TextOp} from 'ot-text-unicode'
 
 /** The text op component from text-unicode */
-export {TextOp} from 'ot-text-unicode'
-export type TextOpComponent = TextOp[0] // Will be exported directly in ot-text-unicode@3.1.1
+export {TextOp, TextOpComponent} from 'ot-text-unicode'
 
 export type JSONOpComponent = {
   /** insert */

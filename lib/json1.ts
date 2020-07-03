@@ -68,6 +68,8 @@ export const type = {
   // {i:....} operation.
   create(data: Doc) { return data },
 
+  isNoop(op: JSONOp) { return op == null },
+
   setDebug(val: boolean) { debugMode = val; (log as any).quiet = !val },
 
   registerSubtype,
@@ -590,7 +592,25 @@ function apply(snapshot: Doc, op: JSONOp) {
 const incPrefix = () => { if (!RELEASE_MODE) (log as any).prefix++ }
 const decPrefix = () => { if (!RELEASE_MODE) (log as any).prefix-- }
 
-function transformPosition(path: Path, op: JSONOp) {
+/**
+ * Transforms a path by an operation. Eg:
+ *
+ * ```javascript
+ * newPath = transformPosition([3, 'address'], [2, {r: true}])
+ * // newPath is [2, 'address']
+ * ```
+ *
+ * This is useful for cursors, for tracking annotations and various other
+ * markers which should stick to a single element of the JSON document.
+ *
+ * transformPosition returns null if the item stored at the path no longer
+ * exists in the document after the operation has been applied. Eg:
+ * 
+ * ```javascript
+ * assert(transformPosition([2, 'address', 'street'], [2, {r: true}]) === null)
+ * ```
+ */
+function transformPosition(path: Path, op: JSONOp): Path | null {
   log('transformPosition', path, op)
   incPrefix()
   path = path.slice()

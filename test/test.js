@@ -425,6 +425,13 @@ describe('json1', () => {
     })
   })
 
+  describe('isNoop', () => {
+    it('works', () => {
+      assert.strictEqual(type.isNoop(null), true)
+      assert.strictEqual(type.isNoop([{r: true}]), false)
+    })
+  })
+
   describe('normalize', () => {
     const n = (opIn, expect) => {
       if (expect === undefined) {
