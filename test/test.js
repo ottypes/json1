@@ -395,7 +395,7 @@ describe('json1', () => {
 
       it('does not allow two edits in the same operation', () => {
         fail([{ e: {}, et: 'simple', es: [1, 2, 3] }])
-        fail([{ es: [], ena: 5 }])
+        fail([{ es: ['hi'], ena: 5 }])
         fail([{ e: {}, et: 'simple', ena: 5 }])
       })
 
@@ -411,7 +411,7 @@ describe('json1', () => {
         fail([['x', { p: 0 }, 1, { es: ['hi'] }], ['y', { d: 0 }]])
 
         // This is actually ok.
-        pass([0, { p: 0 }, ['a', { es: [], r: true }], ['x', { d: 0 }]])
+        pass([0, { p: 0 }, ['a', { es: ['hi'], r: true }], ['x', { d: 0 }]])
       })
 
       it.skip('does not allow you to drop inside something that was removed', () => {
@@ -469,6 +469,11 @@ describe('json1', () => {
       n([{ et: 'simple', e: {} }])
       n([{ et: 'number', e: 5 }], [{ ena: 5 }])
       n([{ ena: 5 }])
+    })
+
+    it('removes embedded noops', () => {
+      n([{ es: []}], null)
+      n([['x', { es: []}], ['y', {r:true}]], ['y', {r:true}])
     })
 
     it.skip('normalizes embedded removes', () => {
@@ -885,6 +890,13 @@ describe('json1', () => {
           op1: [{ ena: 10 }],
           op2: [{ ena: -8 }],
           expect: [{ ena: 2 }]
+        }))
+
+      it('collapses noops at the operation level', () =>
+        compose({
+          op1: [{ es: ['hi'] }],
+          op2: [{ es: [{d:'hi'}] }],
+          expect: null
         }))
 
       it('transforms and composes edits', () =>
@@ -1562,7 +1574,7 @@ describe('json1', () => {
         }))
 
       it('throws if edit types arent compatible', () =>
-        assert.throws(() => type.transform([{ es: [] }], [{ ena: 5 }], 'left')))
+        assert.throws(() => type.transform([{ es: ['hi'] }], [{ ena: 5 }], 'left')))
 
       it('vs move and edit', () =>
         xf({
@@ -1827,7 +1839,7 @@ describe('json1', () => {
     })
 
     describe('discarded edit', () => {
-      it('edit removed directly', () =>
+      it('conflicts with a no-op', () => // regression.
         xf({
           op1: ['a', { es: [] }],
           op2: ['a', { r: true }],
@@ -1835,9 +1847,17 @@ describe('json1', () => {
           expect: null
         }))
 
+      it('edit removed directly', () =>
+        xf({
+          op1: ['a', { es: ['hi'] }],
+          op2: ['a', { r: true }],
+          conflict: { type: RM_UNEXPECTED_CONTENT },
+          expect: null
+        }))
+
       it('edit inside new content throws RM_UNEXPECTED_CONTENT', () =>
         xf({
-          op1: ['a', 'b', { i: 'hi', es: [] }],
+          op1: ['a', 'b', { i: 'hi', es: ['hi'] }],
           op2: ['a', { r: true }],
           conflict: {
             type: RM_UNEXPECTED_CONTENT,
@@ -2259,22 +2279,22 @@ describe('json1', () => {
     it('asdf', () =>
       apply({
         doc: { the: '', Twas: 'the' },
-        op: ['the', { es: [] }],
-        expect: { the: '', Twas: 'the' }
+        op: ['the', { es: ['hi'] }],
+        expect: { the: 'hi', Twas: 'the' }
       }))
 
     it('does not duplicate list items from edits', () =>
       apply({
         doc: ['eyes'],
-        op: [0, { es: [] }],
-        expect: ['eyes']
+        op: [0, { es: ['hi'] }],
+        expect: ['hieyes']
       }))
 
     it('will edit the root document', () =>
       apply({
         doc: '',
-        op: [{ es: [] }],
-        expect: ''
+        op: [{ es: ['hi'] }],
+        expect: 'hi'
       }))
 
     // ------ These have nothing to do with apply. TODO: Move them out of this grouping.
@@ -2303,9 +2323,9 @@ describe('json1', () => {
       })
 
       xf({
-        op1: [0, { es: [] }],
+        op1: [0, { es: ['hi'] }],
         op2: [0, { i: 35 }],
-        expect: [1, { es: [] }]
+        expect: [1, { es: ['hi'] }]
       })
     })
 
@@ -2502,9 +2522,9 @@ describe('json1', () => {
 
     it('more awful edit moves', () =>
       xf({
-        op1: [['a', { p: 0 }], ['c', { d: 0 }, 'x', { es: [] }]],
+        op1: [['a', { p: 0 }], ['c', { d: 0 }, 'x', { es: ['hi'] }]],
         op2: ['a', ['b', { d: 0 }], ['x', { p: 0 }]],
-        expect: [['a', { p: 0 }], ['c', { d: 0 }, 'b', { es: [] }]]
+        expect: [['a', { p: 0 }], ['c', { d: 0 }, 'b', { es: ['hi'] }]]
       }))
 
     it('inserts null', () =>
@@ -2530,9 +2550,9 @@ describe('json1', () => {
 
     it('insert pushes edit target', () =>
       xf({
-        op1: [[0, { i: 'yo' }], [1, 'a', { es: [] }]],
+        op1: [[0, { i: 'yo' }], [1, 'a', { es: ['hi'] }]],
         op2: [0, ['a', { p: 0 }], ['b', { d: 0 }]],
-        expect: [[0, { i: 'yo' }], [1, 'b', { es: [] }]]
+        expect: [[0, { i: 'yo' }], [1, 'b', { es: ['hi'] }]]
       }))
 
     it('composes simple regression', () => {
@@ -2562,7 +2582,7 @@ describe('json1', () => {
 
     it('edit moved inside a removed area should be removed', () =>
       xf({
-        op1: [[0, { r: true }], [2, { es: [] }]],
+        op1: [[0, { r: true }], [2, { es: ['hi'] }]],
         op2: [[0, 'x', { d: 0 }], [3, { p: 0 }]],
         conflict: {
           type: RM_UNEXPECTED_CONTENT,
@@ -2635,7 +2655,7 @@ describe('json1', () => {
 
     it('removed drop indexes tele to op1 pick', () =>
       xf({
-        op1: ['a', 0, [0, { es: [] }], [2, { r: true }]],
+        op1: ['a', 0, [0, { es: ['hi'] }], [2, { r: true }]],
         op2: [
           ['a', { p: 0 }, 0, 0, { p: 1 }],
           ['b', { d: 0 }, 0, 1, 0, { d: 1 }]
@@ -2699,7 +2719,7 @@ describe('json1', () => {
         op2: [
           'Came',
           0,
-          [0, 'he', [0, { d: 0 }], [1, { es: [] }]],
+          [0, 'he', [0, { d: 0 }], [1, { es: ['hi'] }]],
           [1, { p: 0 }]
         ],
         expectLeft: [
@@ -2792,11 +2812,11 @@ describe('json1', () => {
     it('compose copies op2 edit data', () =>
       compose({
         op1: ['a', { r: true }],
-        op2: [['x', { p: 0 }], ['y', { d: 0 }, 'b', { es: [] }]],
+        op2: [['x', { p: 0 }], ['y', { d: 0 }, 'b', { es: ['x'] }]],
         expect: [
           ['a', { r: true }],
           ['x', { p: 0 }],
-          ['y', { d: 0 }, 'b', { es: [] }]
+          ['y', { d: 0 }, 'b', { es: ['x'] }]
         ]
       }))
 
@@ -2821,9 +2841,9 @@ describe('json1', () => {
 
     it('allows embedded edits in identical r/i', () =>
       xf({
-        op1: [{ r: true, i: '', es: [] }],
+        op1: [{ r: true, i: '', es: ['hi'] }],
         op2: [{ r: true, i: '' }],
-        expect: [{ es: [] }]
+        expect: [{ es: ['hi'] }]
       }))
 
     it('does not conflict on identical r/i pairs with identical drops inside', () =>
@@ -2854,20 +2874,20 @@ describe('json1', () => {
           // These parts are all needed for some reason.
           [0, { i: 1 }],
           [1, { r: true }],
-          [3, { es: [] }]
+          [3, { es: ['hi'] }]
         ],
         op2: [0, [0, { d: 0 }], [3, { p: 0 }]],
         expectLeft: [
           0,
           { p: 0, d: 0 },
           [0, { i: 1 }],
-          [1, { es: [] }],
+          [1, { es: ['hi'] }],
           [2, { r: true }]
         ],
         expectRight: [
           0,
           { p: 0, d: 0 },
-          [0, { es: [] }],
+          [0, { es: ['hi'] }],
           [1, { i: 1 }],
           [2, { r: true }]
         ]
@@ -2902,25 +2922,25 @@ describe('json1', () => {
 
     it('pushes drop indexes by other held items', () =>
       xf({
-        op1: [[0, { p: 0 }], [1, [0, { i: 'hi' }], [1, { d: 0, es: [] }]]],
+        op1: [[0, { p: 0 }], [1, [0, { i: 'hi' }], [1, { d: 0, es: ['xx'] }]]],
         op2: [[0, { p: 1 }, 1, { d: 0 }, 2, { d: 1 }], [2, { p: 0 }]],
         expectLeft: [
           0,
           1,
           [0, { i: 'hi' }],
-          [1, { d: 0, es: [] }],
+          [1, { d: 0, es: ['xx'] }],
           [2, { p: 0 }]
         ],
-        expectRight: [0, 1, [0, { i: 'hi' }], [3, { es: [] }]]
+        expectRight: [0, 1, [0, { i: 'hi' }], [3, { es: ['xx'] }]]
       }))
 
     it('composes correctly with lots of removes', () =>
       compose({
         op1: [3, 1, { r: true }],
-        op2: [[0, { es: [] }], [1, { r: true, es: [] }], [2, { r: true }]],
+        op2: [[0, { es: ['xx'] }], [1, { r: true, es: ['yy'] }], [2, { r: true }]],
         expect: [
-          [0, { es: [] }],
-          [1, { es: [], r: true }],
+          [0, { es: ['xx'] }],
+          [1, { es: ['yy'], r: true }],
           [2, { r: true }],
           [3, 1, { r: true }]
         ]
@@ -2949,24 +2969,24 @@ describe('json1', () => {
     it('clears drop2 in transform moves', () =>
       xf({
         doc: [{ b: { a: 'hi' } }],
-        op1: [0, { d: 0 }, ['a', { es: [] }], ['b', { p: 0 }]],
+        op1: [0, { d: 0 }, ['a', { es: ['xx'] }], ['b', { p: 0 }]],
         op2: [0, 'b', ['a', { p: 0 }], ['b', { d: 0 }]],
-        expect: [0, { d: 0 }, 'b', { p: 0, es: [] }]
+        expect: [0, { d: 0 }, 'b', { p: 0, es: ['xx'] }]
       }))
 
     it('descends correctly when op2 picks and drops', () =>
       xf({
         op1: [
-          ['b', { d: 0 }, [1, { es: [] }], [2, { i: null }]],
+          ['b', { d: 0 }, [1, { es: ['hi'] }], [2, { i: null }]],
           ['e', { p: 0 }]
         ],
         op2: [{ p: 0, d: 0 }, 'e', 1, { p: 1, d: 1 }],
         expectLeft: [
-          ['b', { d: 0 }, [1, { i: null }], [2, { es: [] }]],
+          ['b', { d: 0 }, [1, { i: null }], [2, { es: ['hi'] }]],
           ['e', { p: 0 }]
         ],
         expectRight: [
-          ['b', { d: 0 }, [1, { es: [] }], [2, { i: null }]],
+          ['b', { d: 0 }, [1, { es: ['hi'] }], [2, { i: null }]],
           ['e', { p: 0 }]
         ]
       }))

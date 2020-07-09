@@ -31,7 +31,7 @@
 import deepEqual from './deepEqual.js'
 import deepClone from './deepClone.js'
 import {ReadCursor, WriteCursor, readCursor, writeCursor, advancer, eachChildOf} from './cursor.js'
-import { Doc, JSONOpComponent, Path, Key, JSONOp, JSONOpList, Conflict } from './types.js'
+import { Doc, JSONOpComponent, Path, Key, JSONOp, JSONOpList, Conflict, ConflictType } from './types.js'
 
 const RELEASE_MODE = process.env.JSON1_RELEASE_MODE
 const log: (...args: any) => void = RELEASE_MODE ? (() => {}) : require('./log').default
@@ -46,15 +46,16 @@ function assert(pred: any, msg?: string): asserts pred {
 let debugMode = false
 
 
-// Conflicts
+// Conflicts - moved to types.ts
 // const DROP_INTO_REMOVE = 1
 // const RM_UNEXPECTED_CONTENT = 2
 // const DROP_COLLISION = 3
 // const BLACKHOLE = 4
 // const DROP_INTO_REMOVE = 'drop into remove'
-const RM_UNEXPECTED_CONTENT = 1
-const DROP_COLLISION = 2
-const BLACKHOLE = 3
+
+// const RM_UNEXPECTED_CONTENT = 1
+// const DROP_COLLISION = 2
+// const BLACKHOLE = 3
 
 
 export const type = {
@@ -83,9 +84,10 @@ export const type = {
   tryTransform,
   transform,
 
-  RM_UNEXPECTED_CONTENT,
-  DROP_COLLISION,
-  BLACKHOLE,
+  // TODO: Consider simply exporting ConflictType.
+  RM_UNEXPECTED_CONTENT: ConflictType.RM_UNEXPECTED_CONTENT,
+  DROP_COLLISION: ConflictType.DROP_COLLISION,
+  BLACKHOLE: ConflictType.BLACKHOLE,
 
 
 
@@ -148,9 +150,9 @@ export const replaceOp = (path: Path, oldVal: Doc, newVal: Doc) => (
   }).get()
 )
 
-export const editOp = (path: Path, type: Subtype | string, subOp: any) => (
+export const editOp = (path: Path, type: Subtype | string, subOp: any, preserveNoop: boolean = false) => (
   writeCursor()
-  .at(path, w => writeEdit(w, type, subOp))
+  .at(path, w => writeEdit(w, type, subOp, preserveNoop))
   .get()
 )
 
@@ -213,6 +215,7 @@ type Subtype = {
   apply(doc: any, op: any): any, // want to buy: Rust's associated types.
   compose(op1: any, op2: any): any,
   transform(op1: any, op2: any, by: 'left' | 'right'): any
+  isNoop?: (op: any) => boolean
 
   [k: string]: any,
 }
@@ -252,15 +255,21 @@ const getEditType = (c?: JSONOpComponent | null) => (
 const getEdit = (c: JSONOpComponent) => c.es ? c.es : c.ena != null ? c.ena : c.e
 
 // Type is an object or a string name.
-const writeEdit = (w: WriteCursor, type: Subtype | string, edit: any) => {
-  if (typeof type === 'object') type = type.name
+const writeEdit = (w: WriteCursor, typeOrName: Subtype | string, edit: any, preserveNoop: boolean = false) => {
+  // I hope v8 doesn't make a temporary array here.
+  const [type, name] = (typeof typeOrName === 'string')
+    ? [typeOrThrow(typeOrName), typeOrName]
+    : [typeOrName, typeOrName.name]
 
-  if (type === 'number') {
+  // Discard embedded noops.
+  if (!preserveNoop && type.isNoop && type.isNoop(edit)) return
+
+  if (name === 'number') {
     w.write('ena', edit)
-  } else if (type === 'text-unicode') {
+  } else if (name === 'text-unicode') {
     w.write('es', edit) // Text edit-string operation.
   } else { // TODO: Also if t1 === subtypes.number then write ena...
-    w.write('et', type) // Generic embedded edit.
+    w.write('et', name) // Generic embedded edit.
     w.write('e', edit)
   }
 }
@@ -807,6 +816,8 @@ function compose(op1: JSONOp, op2: JSONOp) {
   const p1SlotMap: number[] = []
   const p2SlotMap: number[] = []
 
+  const visitedOp2EditCs = new Set<JSONOpComponent>()
+
   // This is just for debugging.
   const uniqPaths: {[k: string]: Set<string>} = {}
   const uniqDesc = (key: string, reader: ReadCursor | null | undefined) => {
@@ -972,13 +983,16 @@ function compose(op1: JSONOp, op2: JSONOp) {
       const e2 = getEdit(c2d!)
       const r = type1.compose(e1, e2)
       log('compose ->', r)
+      // Only write if its not a no-op.
       writeEdit(wd, type1, r)
+      visitedOp2EditCs.add(c2d!)
     } else if (type1) {
       log('copying edit type1', c1d)
       writeEdit(wd, type1, getEdit(c1d!))
     } else if (type2) {
       log('copying edit type2', c2d)
       writeEdit(wd, type2, getEdit(c2d!))
+      visitedOp2EditCs.add(c2d!)
     }
 
     // We follow strict immutability semantics, so we have to clone the insert
@@ -1142,13 +1156,10 @@ function compose(op1: JSONOp, op2: JSONOp) {
       w.write('i', c.i)
     }
 
+    // xfBoundary above will copy any composed edits in. But we also need to
+    // copy any edits in op2 which aren't at the boundary.
     const t = getEditType(c)
-    // This is a bit dodgy. xfBoundary above will copy any composed edits
-    // in. We'll only copy the r2Drop edit if there's no edit there.
-    //
-    // It'd probably be cleaner to mark which edits have been composed &
-    // copied already, but this should be fine.
-    if (t && !getEditType(w.getComponent())) {
+    if (t && !visitedOp2EditCs.has(c)) {
       writeEdit(w, t, getEdit(c))
     }
   })
@@ -1422,7 +1433,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
           log('conflicting op2 move because drop destination removed', slot2)
           if (!RELEASE_MODE) log('path', r2Drop.getPath(), r2Pick!.getPath())
           if (conflict == null) conflict = {
-            type: RM_UNEXPECTED_CONTENT,
+            type: ConflictType.RM_UNEXPECTED_CONTENT,
             op1: removeOp(removed1.getPath()),
             op2: moveOp(r2Pick!.getPath(), r2Drop.getPath())
           }
@@ -1439,7 +1450,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
           // TODO: It'd be nice to merge this with the conflict raise above
           log('Conflicting op2 drop because op1 remove')
           if (conflict == null) conflict = {
-            type: RM_UNEXPECTED_CONTENT,
+            type: ConflictType.RM_UNEXPECTED_CONTENT,
             op1: removeOp(removed1.getPath()),
             op2: insertOp(r2Drop.getPath(), c2d.i)
           }
@@ -1464,9 +1475,9 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
       // able to move the code rewriting removed1 to the top of the function.
       log('rm / edit conflict')
       if (conflict == null) conflict = {
-        type: RM_UNEXPECTED_CONTENT,
+        type: ConflictType.RM_UNEXPECTED_CONTENT,
         op1: removeOp(removed1.getPath()),
-        op2: editOp(r2Drop.getPath(), t2, getEdit(c2d!)),
+        op2: editOp(r2Drop.getPath(), t2, getEdit(c2d!), true),
       }
     }
 
@@ -1770,7 +1781,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
             log("Overlapping drop conflict!")
 
             if (conflict == null) conflict = {
-              type: DROP_COLLISION,
+              type: ConflictType.DROP_COLLISION,
               op1: insOrMv(slot1 != null ? heldOp1PickByOp1[slot1] : null, p1Drop, c1d!),
               op2: insOrMv(slot2 != null ? heldOp2PickByOp2[slot2]! : null, p2Drop!, c2d),
             }
@@ -1786,7 +1797,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
             // if (pc) pc['r'] = true
             // log(slot1, heldOp1PickByOp1[slot1].getPath())
             if (conflict == null) conflict = {
-              type: RM_UNEXPECTED_CONTENT,
+              type: ConflictType.RM_UNEXPECTED_CONTENT,
               op1: insOrMv(slot1 != null ? heldOp1PickByOp1[slot1] : null, p1Drop, c1d!),
               op2: removeOp(removed2.getPath()),
             }
@@ -1911,9 +1922,19 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
 
         //writeEdit(w, t1, getEdit(c1d))
       } else {
+        // The embedded edit is trying to edit something that has been removed
+        // by op2.
+        //
+        // This branch also triggers if the embedded edit is a no-op. I'm not
+        // sure what the expected behaviour should be in this case, because both
+        // options are bad:
+        // - We can return `null` as op1, even though this wouldn't trigger the
+        //   conflict if we re-ran transform on the returned result
+        // - We preserve the no-op in the conflict, returning a non-normalized
+        //   result (current behaviour)
         if (conflict == null) conflict = {
-          type: RM_UNEXPECTED_CONTENT,
-          op1: editOp(p1Drop.getPath(), t1, e1),
+          type: ConflictType.RM_UNEXPECTED_CONTENT,
+          op1: editOp(p1Drop.getPath(), t1, e1, true),
           op2: removeOp(removed2.getPath()),
         }
       }
@@ -2361,7 +2382,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
         })
 
         conflict = {
-          type: BLACKHOLE,
+          type: ConflictType.BLACKHOLE,
           op1: w1.get(),
           op2: w2.get(),
         }
@@ -2398,6 +2419,7 @@ function transform(op1: JSONOp, op2: JSONOp, side: 'left' | 'right') {
   else throwConflictErr(res.conflict)
 }
 
+/** Make an op that removes the content at the drop and edit destinations of the passed op */
 const opThatRemovesDE = (op: JSONOp) => {
   const w = writeCursor()
   readCursor(op).traverse(w, (c, w) => {
@@ -2411,19 +2433,19 @@ const resolveConflict = (conflict: Conflict, side: 'left' | 'right') => {
   log('resolving conflict of type', type)
 
   switch (type) {
-    case DROP_COLLISION:
+    case ConflictType.DROP_COLLISION:
       // log(c2, removeOp(c2.drop))
 
       return side === 'left'
         ? [null, opThatRemovesDE(op2)]
         : [opThatRemovesDE(op1), null]
 
-    case RM_UNEXPECTED_CONTENT:
+    case ConflictType.RM_UNEXPECTED_CONTENT:
       let op1HasRemove = false
       readCursor(op1).traverse(null, c => {if (c.r !== undefined) op1HasRemove = true})
       return op1HasRemove ? [null, opThatRemovesDE(op2)] : [opThatRemovesDE(op1), null]
     
-    case BLACKHOLE:
+    case ConflictType.BLACKHOLE:
       // The conflict will have moves from each operation
       //
       // There's no good automatic resolution for blackholed content. Both
@@ -2453,9 +2475,10 @@ function transformWithConflictsPred(allowConflict: AllowConflictPred, op1: JSONO
     if (res.ok) return compose(r2Aggregate, res.result)
     else {
       const {conflict} = res
+      log('detected conflict', conflict)
       if (!allowConflict(conflict)) throwConflictErr(conflict)
 
-      if (!RELEASE_MODE && conflict.type === BLACKHOLE) {
+      if (!RELEASE_MODE && conflict.type === ConflictType.BLACKHOLE) {
         const res2 = tryTransform(op2, op1, side === 'left' ? 'right' : 'left')
         // const {ok: ok2, result: result2, conflict: conflict2} = res2
         assert(!res2.ok)
@@ -2471,8 +2494,15 @@ function transformWithConflictsPred(allowConflict: AllowConflictPred, op1: JSONO
       // Recover from the conflict
       const [r1, r2] = resolveConflict(conflict, side)
       log('Resolve ops', r1, r2)
-      op1 = compose(op1, r1)
-      op2 = compose(op2, r2)
+      // I'm normalizing here to work around a bug where a non-normalized op (eg
+      // `[{"es":[]}]`) generates a conflict but cannot ever be resolved because
+      // the conflict object returned by transform loses information about the
+      // conflicting part of the operation.
+      //
+      // This shouldn't come up with well formed operations in general, but
+      // without this the code here ends up in an infinite loop in these cases.
+      op1 = compose(normalize(op1), r1)
+      op2 = compose(normalize(op2), r2)
       r2Aggregate = compose(r2Aggregate, r2)
       log('recover from conflict', conflict)
       log('op1 ->', op1)

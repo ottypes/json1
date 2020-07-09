@@ -70,7 +70,13 @@ export type Path = Key[]
  */
 export type Doc = null | boolean | number | string | Doc[] | {[k: string]: Doc}
 
-export interface Conflict { type: number, op1: JSONOp, op2: JSONOp }
+export enum ConflictType {
+  RM_UNEXPECTED_CONTENT = 1,
+  DROP_COLLISION = 2,
+  BLACKHOLE = 3,
+}
+
+export interface Conflict { type: ConflictType, op1: JSONOp, op2: JSONOp }
 
 // export const type: {
 //   name: 'json1'
