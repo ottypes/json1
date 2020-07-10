@@ -79,6 +79,10 @@ export const type = {
   tryTransform,
   transform,
 
+  makeInvertible,
+  invert,
+  invertWithDoc,
+
   // TODO: Consider simply exporting ConflictType.
   RM_UNEXPECTED_CONTENT: ConflictType.RM_UNEXPECTED_CONTENT,
   DROP_COLLISION: ConflictType.DROP_COLLISION,
@@ -1171,6 +1175,213 @@ function compose(op1: JSONOp, op2: JSONOp) {
   return result
 }
 
+// ***** Invert
+
+
+
+/**
+ * Invert the given operation. Operation must be invertible - which is to say,
+ * all removes in the operation must contain all removed content. Note any
+ * operation returned from transform() and compose() will have this content
+ * stripped.
+ *
+ * Unless you know what you're doing, I highly recommend calling invertWithDoc()
+ * instead.
+ */
+function invert(op: JSONOp): JSONOp {
+  // This is pretty simple:
+  // - All r -> i, i -> r
+  // - d -> p, p -> d. (Although note this may make the slot order
+  //   non-canonical.)
+  // - And edits (unfortunately) need to be reverse-transformed by the
+  //   operation.
+  //
+  // WIP: This implementation is not correct yet. Inserts also need to be
+  // modified by the operation's embedded edits. This does not currently work
+  // correctly.
+
+  if (op == null) return null
+
+  const r = new ReadCursor(op)
+  const w = new WriteCursor()
+
+  let hasEdit = false // We'll only do the second edit pass if this is true.
+
+  const heldPick: ReadCursor[] = []
+  const heldWrites: WriteCursor[] = []
+
+  r.traverse(w, (c, w) => {
+    if (getEditType(c)) hasEdit = true
+
+    if (c.p != null) {
+      w.write('d', c.p) // p -> d
+      heldPick[c.p] = r.clone()
+    }
+    if (c.r !== undefined) w.write('i', c.r) // r -> i
+
+    if (c.d != null) w.write('p', c.d) // d -> p
+    if (c.i !== undefined) w.write('r', c.i) // i -> r
+  })
+
+  if (hasEdit) {
+    // Ok, we need to reverse-transform the edit here by the operation. We're
+    // traversing in the drop context (so rDrop is never null) but we also need
+    // to know the pick context to be able to fix indexes.
+    //
+    // w is in the pick context.
+    function transformEdits(rPick: ReadCursor | null, rDrop: ReadCursor, w: WriteCursor) {
+      if (!RELEASE_MODE) log('invXE', rPick?.getPath(), rDrop.getPath())
+      incPrefix()
+
+      const cd = rDrop.getComponent()
+      if (cd) {
+        const dropSlot = cd.d
+        if (dropSlot != null) {
+          log('teleporting to drop slot', dropSlot)
+          rPick = heldPick[dropSlot]
+          w = heldWrites[dropSlot] = writeCursor()
+        }
+
+        const t = getEditType(cd)
+        if (t) {
+          // TODO: Add support for types which only have invertWithDoc.
+          if (!t.invert) throw Error(`Cannot invert subtype ${t.name}`)
+          if (!RELEASE_MODE) log('inverting subtype', t.name, getEdit(cd))
+          writeEdit(w, t, t.invert(getEdit(cd)))
+        }
+      }
+
+      // And recurse.
+      let pickOff = 0, dropOff = 0
+      const ap = advancer(rPick,
+        (k, c) => hasPick(c) ? (pickOff - k - 1) : k - pickOff,
+        (k, c) => { if (hasPick(c)) pickOff++ })
+  
+      for (const key of rDrop) {
+        if (typeof key === 'number') {
+          const mid = key - dropOff
+          const _rPick = ap(mid)
+          const raw = mid + pickOff
+          w.descend(raw)
+          transformEdits(_rPick, rDrop, w)
+          if (hasDrop(rDrop.getComponent())) dropOff++
+          w.ascend()
+        } else {
+          w.descend(key)
+          transformEdits(ap(key), rDrop, w)
+          w.ascend()
+        }
+        
+      }
+
+      decPrefix()
+    }
+
+    transformEdits(r.clone(), r, w)
+    w.reset()
+
+    if (heldWrites.length) {
+      if (!RELEASE_MODE) log('Merging held writes', heldWrites.map(w => w.get()))
+
+      // Merge held writes
+      r.traverse(w, (c, w) => {
+        log('traverse', c)
+        const slot = c.p
+        if (slot != null) {
+          log('merging slot', slot)
+          const _w = heldWrites[slot]
+          if (_w) log('merge', _w.get())
+          if (_w) w.mergeTree(_w.get())
+        }
+      })
+    }
+  }
+
+  const result = w.get()
+  log('-> invert returning:', result)
+  if (!RELEASE_MODE) checkValidOp(result)
+  return result
+}
+
+// Does an operation contain a remove?
+const anyComponent = (op: JSONOpList, fn: (c: JSONOpComponent) => boolean): boolean => (
+  op.some(c => (
+    typeof c === 'object'
+      ? (Array.isArray(c) ? anyComponent(c, fn) : fn(c))
+      : false
+  ))
+)
+
+function makeInvertible(op: JSONOp, doc: Doc) {
+  log('makeInvertible', op, doc)
+  if (op == null || !anyComponent(op, c => (
+    // TODO: Could tighten this bound to only look for subtypes with makeInvertible.
+    c.r !== undefined || getEditType(c)?.makeInvertible != null
+  ))) return op
+
+  const r = new ReadCursor(op)
+  const w = new WriteCursor()
+
+  // Basically we're going to copy r to w and traverse doc along the way. When
+  // we run into r: components we'll deep clone from doc.
+
+  // This approach ends up deep cloning op, even though a shallow copy would do.
+  // I'm not too worried about the performance impact here.
+
+  const traverse = (r: ReadCursor, w: WriteCursor, subDoc: Doc | undefined) => {
+    const c = r.getComponent()
+    // log('traverse', subDoc, c)
+    if (c) {
+      for (const k of ['p', 'd', 'i'] as (keyof JSONOpComponent)[]) {
+        if (c[k] !== undefined) w.write(k, c[k])
+        if (c[k] !== undefined) log('copying field', k)
+      }
+
+      // Copy remove - but deep clone from document
+      if (c.r !== undefined) {
+        if (subDoc === undefined) throw Error('Invalid document in makeInvertible: removed item missing from doc')
+        w.write('r', shallowClone(subDoc))
+      }
+
+      // Copy edit, but recursively call makeInvertible if we can.
+      const t = getEditType(c)
+      if (t) {
+        const edit = getEdit(c)
+        // log('edit', edit, 'type', t)
+        writeEdit(w, t,
+          t.makeInvertible
+            ? t.makeInvertible(edit, subDoc)
+            : edit,
+          true)
+      }
+    }
+
+    for (const key of r) {
+      w.descend(key)
+      const child = isValidKey(subDoc, key)
+        ? (subDoc as any)[key]
+        : undefined
+      traverse(r, w, child)
+      w.ascend()
+    }
+  }
+
+  traverse(r, w, doc)
+
+  const result = w.get()
+  log('-> invertible:', result)
+  if (!RELEASE_MODE) checkValidOp(result)
+  return result
+}
+
+/**
+ * Invert the given operation in the context of the passed document. The
+ * specified document must be the document *before* the operation has been
+ * applied.
+ */
+function invertWithDoc(op: JSONOp, doc: Doc) {
+  return invert(makeInvertible(op, doc))
+}
 
 // ***** Transform
 

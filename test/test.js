@@ -701,6 +701,103 @@ describe('json1', () => {
     })
   })
 
+  // ***** Invert *****
+
+  describe('invert', () => {
+    describe('makeInvertible', () => {
+      const mi = (op, doc = null, expect = op) => {
+        const invertible = type.makeInvertible(op, doc)
+        assert.deepStrictEqual(invertible, expect)
+      }
+
+      it('makeInvertible is sane', () => {
+        mi(null)
+        mi([{i:'hi'}])
+        mi([2, {en:50}])
+        mi([{r:true}], 'hi', [{r: 'hi'}])
+        mi([2, {r:true}], [0, 1, 'hi'], [2, {r: 'hi'}])
+      })
+      
+      it('ignores descents into other parts of the op', () =>
+        mi(
+          [['x', {r:true}], ['y', {i:5}]],
+          {x: 'hi'},
+          [['x', {r:'hi'}], ['y', {i:5}]]
+        ))
+
+      it('recursively calls makeInvertible on embedded operations', () => 
+        mi(
+          [{es:[1, {d:5}]}],
+          'abcdef',
+          [{es:[1, {d:'bcdef'}]}]
+        ))
+    })
+
+    describe('invert', () => {
+      const i = (op, expected, doc) => {
+        const actual = type.invert(op)
+        assert.deepStrictEqual(actual, expected)
+
+        if (doc !== undefined) {
+          // Also for sanity, make sure if we apply the op then undo it we end
+          // up with the same doc.
+          const doc1 = type.apply(doc, op) // after the op is applied
+          const doc2 = type.apply(doc1, expected) // and then undone
+
+          assert.deepStrictEqual(doc, doc2)
+        }
+      }
+
+      it('inverts child operations', () => i(
+        [{es: ['x']}],
+        [{es: [{d:'x'}]}],
+        '_'
+      ))
+
+      it('inverts child operations 2', () => i(
+        [2, {es: ['x']}],
+        [2, {es: [{d:'x'}]}],
+        [0, 1, '_']
+      ))
+
+      it('swaps pick and drop locations', () => i(
+        [['x', {p:0}], ['y', {d:0}]],
+        [['x', {d:0}], ['y', {p:0}]],
+        {x:5}
+      ))
+        
+      it('teleports embedded edits based on the parent move', () => i(
+        [['x', {p:0}], ['y', {d:0}, 0, {es:['hi']}]],
+        [['x', {d:0}, 0, {es: [{d:'hi'}]}], ['y', {p:0}]],
+        {x: ['_']}
+      ))
+
+      it('transforms indexes based on pick locations', () => i(
+        [[0, {r:true}], [1, {es:['hi']}]],
+        [[0, {i:true}], [2, {es:[{d:'hi'}]}]],
+        [true, 123, '_']
+      ))
+
+      it('transforms indexes based on drop locations', () => i(
+        [[0, {i:true}], [1, {es:['hi']}]], // -> [true, 'hi_']
+        [0, {r:true, es:[{d:'hi'}]}],
+        ['_']
+      ))
+
+      it.skip('an operation thats immediately edited is removed entirely', () => i(
+        [{i: 'hi', es: ['x']}],
+        [{r: 'xhi'}],
+        '_'
+      ))
+
+      it.skip('an operation thats immediately edited internally is removed entirely', () => i(
+        [{i: {x: 'hi'}}, ['x', {es: ['x']}]],
+        [{r: {x: 'xhi'}}],
+        null
+      ))
+    })
+  })
+
   // ******* Compose *******
 
   describe('compose', () => {
