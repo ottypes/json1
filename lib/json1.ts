@@ -14,13 +14,8 @@
 // ** This is still a work in progress. The tests don't all pass yet. **
 //
 // My TODO list:
-// - Feature parity with the old version
-// - number operations
-// - compose()
 // - compose preserve invertable data
-// - makeInvertable and invert()
-// - Fuzzer, fix bugs
-// - Port to JS.
+// - makeInvertible and invert()
 
 // - setNull = ??
 // - remove N items in a list
@@ -216,6 +211,8 @@ type Subtype = {
   compose(op1: any, op2: any): any,
   transform(op1: any, op2: any, by: 'left' | 'right'): any
   isNoop?: (op: any) => boolean
+  invert?: (op: any) => any
+  makeInvertible?: (op: any, doc: any) => any
 
   [k: string]: any,
 }
@@ -240,6 +237,7 @@ registerSubtype({
   name: 'number',
   apply: add,
   compose: add,
+  invert: (n: number) => -n,
   transform: a => a,
 })
 
@@ -878,7 +876,7 @@ function compose(op1: JSONOp, op2: JSONOp) {
       if (!RELEASE_MODE) log('r2Drop', r2Drop && r2Drop.getPath())
 
       // Writes here need to be transformed to op2's drop location.
-      wd = heldDropWrites[pick2Slot] = writeCursor()
+      wd = heldDropWrites[pick2Slot] = new WriteCursor()
       // rmParent = null
     } else if (c2p && c2p.r !== undefined) {
       r2Drop = null
@@ -895,7 +893,7 @@ function compose(op1: JSONOp, op2: JSONOp) {
       r1Pick = held1Pick[drop1Slot]
 
       // Writes here need to be transformed to op2's drop location.
-      wp = heldPickWrites[drop1Slot] = writeCursor()
+      wp = heldPickWrites[drop1Slot] = new WriteCursor()
 
       if (!rmChildren) {
         const slot = p1SlotMap[drop1Slot] = nextSlot++
@@ -903,6 +901,7 @@ function compose(op1: JSONOp, op2: JSONOp) {
         wd.write('d', slot)
       } else {
         log('Cancelling op1 move', drop1Slot, 'rmParent', rmParent, 'rmHere', rmHere)
+        // TODO: merge removed subdocuments here. This logic should mirror compose on insert.
         if (rmParent && !rmHere) wp.write('r', true)
       }
     } else if (c1d && c1d.i !== undefined) {
