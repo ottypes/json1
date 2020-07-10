@@ -77,28 +77,3 @@ export enum ConflictType {
 }
 
 export interface Conflict { type: ConflictType, op1: JSONOp, op2: JSONOp }
-
-// export const type: {
-//   name: 'json1'
-
-//   readCursor(): void
-//   writeCursor(): void
-
-//   // uri: string;
-//   create(val?: Doc): Doc
-
-//   registerSubtype(subtype: any): void
-
-//   checkValidOp(op: JSONOp): void // Should this be checkOp?
-//   normalize(op: JSONOp): JSONOp
-//   apply(doc: Doc, op: JSONOp): Doc
-//   transform(op: JSONOp, other: JSONOp, side: "left" | "right"): JSONOp
-//   compose(a: JSONOp, b: JSONOp): JSONOp
-//   transformPosition(path: Path, op: JSONOp): Path
-// }
-
-// export function removeOp(path: Path, value?: any): JSONOp
-// export function moveOp(from: Path, to: Path): JSONOp
-// export function insertOp(path: Path, value: any): JSONOp
-// export function replaceOp(path: Path, oldVal: any, newVal: any): JSONOp
-// export function editOp(path: Path, type: string | any, subOp: any): JSONOp
