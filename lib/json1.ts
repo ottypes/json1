@@ -1204,8 +1204,12 @@ function invert(op: JSONOp): JSONOp {
   // There's a few goals for this first traversal:
   // - For any edits inside an insert, bake the edit
   // - Decide if there are embedded edits we need to reverse-transform to the pick site
-  // - For picks and drops, simply rewrite them. 
+  // - For picks and drops, simply rewrite them.
+  //
+  // Note subDoc is always in drop context (in the original document).
   function invertSimple(r: ReadCursor, w: WriteCursor, subDoc: Doc | undefined) {
+    if (!RELEASE_MODE) log('invertSimple', r.getPath(), subDoc)
+    incPrefix()
     const c = r.getComponent()
     let insertHere, subdocModified = false
 
@@ -1233,31 +1237,37 @@ function invert(op: JSONOp): JSONOp {
 
       const t = getEditType(c)
       if (t) {
-        log('t', subDoc)
+        log('found edit', c, subDoc)
         if (subDoc === undefined) {
-          // hasEdit = true
           if (!editsToTransform) editsToTransform = new Set()
           editsToTransform.add(c)
         } else {
-          // Modify subdoc with the edit. There's a potential corner case where
-          // the operation has an edit, and then inside the edited content we do
-          // a drop / insert. But this is invalid, so I'm not going to worry too
-          // much about it here. Ideally checkOp should pick that sort of thing
-          // up.
+          // Mark that we want to modify the subdoc with the edit. There's a
+          // potential corner case where the operation has an edit, and then
+          // inside the edited content we do a drop / insert. But this is
+          // invalid, so I'm not going to worry too much about it here. Ideally
+          // checkOp should pick that sort of thing up.
+          log('baking edit into subDoc', subDoc, getEdit(c))
           subDoc = t.apply(subDoc, getEdit(c))
           subdocModified = true
         }
       }
     }
 
+    // This is to handle drops / inserts while we're inside an insert, to access
+    // indexes correctly in subDoc.
+    let dropOff = 0
+
     for (const key of r) {
-      if (w) w.descend(key)
-      const childIn = isValidKey(subDoc, key)
-        ? (subDoc as any)[key]
-        : undefined
-      // childSubdocOut is undefined if either we aren't in an insert or the
-      // subdoc wasn't mutated.
+      w.descend(key)
+
+      const raw = typeof key === 'number' ? key - dropOff : key
+      const childIn = maybeGetChild(subDoc, raw)
+      // childOut is undefined if either we aren't in an insert or the subdoc wasn't mutated.
+      if (hasDrop(r.getComponent())) dropOff++
+
       const childOut = invertSimple(r, w, childIn)
+      log('key', key, 'raw', raw, childIn, childOut, 'subdoc', subDoc)
       // TODO: subDoc !== undefined check here might be redundant.
       if (subDoc !== undefined && childOut !== undefined) {
         if (!subdocModified) {
@@ -1265,18 +1275,21 @@ function invert(op: JSONOp): JSONOp {
           // And shallow clone
           subDoc = shallowClone(subDoc)
         }
-        if (!isValidKey(subDoc, key)) throw Error('Cannot modify child - invalid operation')
-        ;(subDoc as any)[key] = childOut
+        if (!isValidKey(subDoc, raw)) throw Error('Cannot modify child - invalid operation')
+        ;(subDoc as any)[raw] = childOut
       }
-      if (w) w.ascend()
+
+      w.ascend()
     }
 
+    decPrefix()
     if (insertHere !== undefined) {
       w.write('r', subDoc)
     } else {
       return subdocModified ? subDoc : undefined
     }
   }
+
   invertSimple(r, w, undefined)
   if (!RELEASE_MODE) log('invert after pass 1', w.get())
 

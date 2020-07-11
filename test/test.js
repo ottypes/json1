@@ -814,7 +814,6 @@ describe('json1', () => {
           [ 'b', { d: 0 } ],
           [ 'z', { r: [ 1, 3 ] }, 1, { p: 0 } ]
         ]
-
       ))
     })
 
@@ -913,6 +912,11 @@ describe('json1', () => {
         [['a', {p:0}], ['b', {i: {}}, 'a', {d: 0}, 'x', {es:['x']}]],
         [['a', {d:0}, 'x', {es:[{d:'x'}]}], ['b', {r: {}}, 'a', {p:0}]],
         {a: {x: '_'}}
+      ))
+
+      it('adjusts indexes when it bakes based off inline inserts', () => i( // repro
+        [ {i: [ 99 ]}, [ 0, { i: null } ], [ 1, { ena: 1 } ] ],
+        [ { r: [ 100 ] }, 0, { r: null } ]
       ))
     })
 
