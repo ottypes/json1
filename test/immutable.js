@@ -10,15 +10,12 @@ describe('immutable guarantees', function() {
   const expectDoc = deepClone(origDoc)
   const n = 1000
   // These tests are only slow in debug mode. In release mode they're pretty snappy.
-  this.slow(n * 500)
+  this.slow(n * 5)
+  this.timeout(n * 10)
 
   it('apply does not mutate', () => {
     const result = []
-    for (
-      let i = 1, end = n, asc = 1 <= end;
-      asc ? i <= end : i >= end;
-      asc ? i++ : i--
-    ) {
+    for (let i = 0; i < n; i++) {
       const [op, doc] = genOp(origDoc)
       assert.deepStrictEqual(origDoc, expectDoc)
 
@@ -42,11 +39,7 @@ describe('immutable guarantees', function() {
   })
 
   it('compose does not mutate', () => {
-    for (
-      let i = 1, end = n, asc = 1 <= end;
-      asc ? i <= end : i >= end;
-      asc ? i++ : i--
-    ) {
+    for (let i = 0; i < n; i++) {
       let op2
       let [op1, doc] = genOp(origDoc)
       ;[op2, doc] = genOp(doc)
@@ -64,11 +57,7 @@ describe('immutable guarantees', function() {
   })
 
   it('transform does not mutate', () => {
-    for (
-      let i = 1, end = n, asc = 1 <= end;
-      asc ? i <= end : i >= end;
-      asc ? i++ : i--
-    ) {
+    for (let i = 0; i < n; i++) {
       const [op1, doc1] = genOp(origDoc)
       const [op2, doc2] = genOp(origDoc)
 
