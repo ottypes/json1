@@ -1205,25 +1205,98 @@ function invert(op: JSONOp): JSONOp {
   const r = new ReadCursor(op)
   const w = new WriteCursor()
 
-  let hasEdit = false // We'll only do the second edit pass if this is true.
+  // let hasEdit = false // We'll only do the second edit pass if this is true.
+  
+  // I could just duplicate the logic for deciding which edits need to be
+  // inspected in the second pass, but its much simpler to just mark the
+  // components in the read.
+  let editsToTransform: undefined | Set<JSONOpComponent>
 
   const heldPick: ReadCursor[] = []
   const heldWrites: WriteCursor[] = []
 
-  r.traverse(w, (c, w) => {
-    if (getEditType(c)) hasEdit = true
+  log('inverting', op)
 
-    if (c.p != null) {
-      w.write('d', c.p) // p -> d
-      heldPick[c.p] = r.clone()
+  // There's a few goals for this first traversal:
+  // - For any edits inside an insert, bake the edit
+  // - Decide if there are embedded edits we need to reverse-transform to the pick site
+  // - For picks and drops, simply rewrite them. 
+  function invertSimple(r: ReadCursor, w: WriteCursor, subDoc: Doc | undefined) {
+    const c = r.getComponent()
+    let insertHere, subdocModified = false
+
+    if (c) {
+      // TODO: Consider using a slot map so invert returns the same operations as
+      // normalize().
+      if (c.p != null) {
+        w.write('d', c.p) // p -> d
+        heldPick[c.p] = r.clone()
+      }
+      if (c.r !== undefined) w.write('i', c.r) // r -> i
+  
+      if (c.d != null) {
+        w.write('p', c.d) // d -> p
+        subDoc = undefined
+      }
+      if (c.i !== undefined) {
+        // If subdoc is set (not undefined), we're either an insert or a direct
+        // child of an insert. In this case this method will return either
+        // undefined (no change to the insert) or it will return the updated
+        // insert child. We ripple up in this case making shallow copies and
+        // replace the remove with that.
+        subDoc = insertHere = c.i // i -> r, written out below.
+      }
+
+      const t = getEditType(c)
+      if (t) {
+        log('t', subDoc)
+        if (subDoc === undefined) {
+          // hasEdit = true
+          if (!editsToTransform) editsToTransform = new Set()
+          editsToTransform.add(c)
+        } else {
+          // Modify subdoc with the edit. There's a potential corner case where
+          // the operation has an edit, and then inside the edited content we do
+          // a drop / insert. But this is invalid, so I'm not going to worry too
+          // much about it here. Ideally checkOp should pick that sort of thing
+          // up.
+          subDoc = t.apply(subDoc, getEdit(c))
+          subdocModified = true
+        }
+      }
     }
-    if (c.r !== undefined) w.write('i', c.r) // r -> i
 
-    if (c.d != null) w.write('p', c.d) // d -> p
-    if (c.i !== undefined) w.write('r', c.i) // i -> r
-  })
+    for (const key of r) {
+      if (w) w.descend(key)
+      const childSubdocIn = isValidKey(subDoc, key)
+        ? (subDoc as any)[key]
+        : undefined
+      // childSubdocOut is undefined if either we aren't in an insert or the
+      // subdoc wasn't mutated.
+      const childSubdocOut = invertSimple(r, w, childSubdocIn)
+      // TODO: subDoc !== undefined check here might be redundant.
+      if (subDoc !== undefined && childSubdocOut !== undefined) {
+        if (!subdocModified) {
+          subdocModified = true
+          // And shallow clone
+          subDoc = shallowClone(subDoc)
+        }
+        if (!isValidKey(subDoc, key)) throw Error('Cannot modify child - invalid operation')
+        ;(subDoc as any)[key] = childSubdocOut
+      }
+      if (w) w.ascend()
+    }
 
-  if (hasEdit) {
+    if (insertHere !== undefined) {
+      w.write('r', subDoc)
+    } else {
+      return subdocModified ? subDoc : undefined
+    }
+  }
+  invertSimple(r, w, undefined)
+  if (!RELEASE_MODE) log('invert after pass 1', w.get())
+
+  if (editsToTransform) {
     // Ok, we need to reverse-transform the edit here by the operation. We're
     // traversing in the drop context (so rDrop is never null) but we also need
     // to know the pick context to be able to fix indexes.
@@ -1242,8 +1315,8 @@ function invert(op: JSONOp): JSONOp {
           w = heldWrites[dropSlot] = writeCursor()
         }
 
-        const t = getEditType(cd)
-        if (t) {
+        if (editsToTransform!.has(cd)) {
+          const t = getEditType(cd)!
           // TODO: Add support for types which only have invertWithDoc.
           if (!t.invert) throw Error(`Cannot invert subtype ${t.name}`)
           if (!RELEASE_MODE) log('inverting subtype', t.name, getEdit(cd))

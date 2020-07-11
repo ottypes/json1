@@ -740,14 +740,12 @@ describe('json1', () => {
         const actual = type.invert(op)
         assert.deepStrictEqual(actual, expected)
 
-        if (doc !== undefined) {
-          // Also for sanity, make sure if we apply the op then undo it we end
-          // up with the same doc.
-          const doc1 = type.apply(doc, op) // after the op is applied
-          const doc2 = type.apply(doc1, expected) // and then undone
+        // Also for sanity, make sure if we apply the op then undo it we end
+        // up with the same doc.
+        const doc1 = type.apply(doc, op) // after the op is applied
+        const doc2 = type.apply(doc1, expected) // and then undone
 
-          assert.deepStrictEqual(doc, doc2)
-        }
+        assert.deepStrictEqual(doc, doc2)
       }
 
       it('inverts child operations', () => i(
@@ -786,16 +784,42 @@ describe('json1', () => {
         ['_']
       ))
 
-      it.skip('an operation thats immediately edited is removed entirely', () => i(
+      it('an operation thats immediately edited is removed entirely', () => i(
         [{i: 'hi', es: ['x']}],
         [{r: 'xhi'}],
-        '_'
       ))
 
-      it.skip('an operation thats immediately edited internally is removed entirely', () => i(
-        [{i: {x: 'hi'}}, ['x', {es: ['x']}]],
+      it('an operation thats immediately edited internally is removed entirely', () => i(
+        [{i: {x: 'hi'}}, 'x', {es: ['x']}],
         [{r: {x: 'xhi'}}],
-        null
+      ))
+
+      it('ignores edits that have been baked', () => i(
+        [['a', {i: 'hi', es: ['x']}], ['b', {es: ['y']}]],
+        [['a', {r: 'xhi'}], ['b', {es: [{d:'y'}]}]],
+        {b: '_'}
+      ))
+
+      it('ins, ins-edit', () => i(
+        [{i: {}}, 'x', {i: '_', es: ['x']}],
+        [{r: {}}, 'x', {r: 'x_'}]
+      ))
+
+      it('ins, ins, edit', () => i(
+        [{i: {}}, 'x', {i: ['_']}, 0, {es: ['x']}],
+        [{r: {}}, 'x', {r: ['x_']}]
+      ))
+
+      it('ins, drop-edit', () => i(
+        [['a', {p:0}], ['b', {i: {}}, 'a', {d: 0, es:['x']}]],
+        [['a', {d:0, es:[{d:'x'}]}], ['b', {r: {}}, 'a', {p:0}]],
+        {a: '_'}
+      ))
+
+      it('ins, drop, edit', () => i(
+        [['a', {p:0}], ['b', {i: {}}, 'a', {d: 0}, 'x', {es:['x']}]],
+        [['a', {d:0}, 'x', {es:[{d:'x'}]}], ['b', {r: {}}, 'a', {p:0}]],
+        {a: {x: '_'}}
       ))
     })
   })
