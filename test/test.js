@@ -65,6 +65,17 @@ const invConflict = ({ type, op1, op2 }) => ({ type, op1: op2, op2: op1 })
 
 const otherSide = side => (side === 'left' ? 'right' : 'left')
 
+const deepFreeze = obj => {
+  if (typeof obj === 'object' && obj != null) {
+    Object.freeze(obj)
+    if (Array.isArray(obj)) obj.forEach(deepFreeze)
+    else for (const k in obj) {
+      deepFreeze(obj[k])
+    }
+  }
+  return obj // chaining
+}
+
 const checkConflict = ({
   op1,
   op2,
@@ -788,6 +799,19 @@ describe('json1', () => {
         { y: 'omg' },
         [ [ 'b', { i: null } ], [ 'y', { r: 'omg' } ] ]
       ))
+
+      it('repro 2', () => mi(
+        [
+          [ 'b', { d: 0 } ],
+          [ 'z', { r: true }, 1, { p: 0 } ]
+        ],
+        { z: [ 1, 'whoa', 3 ] },
+        [
+          [ 'b', { d: 0 } ],
+          [ 'z', { r: [ 1, 3 ] }, 1, { p: 0 } ]
+        ]
+
+      ))
     })
 
     describe('invert', () => {
@@ -892,13 +916,16 @@ describe('json1', () => {
       // This is a tiny version of the normal fuzzer's tests, just for invert.
 
       it('invert fuzz', function () {
+        // Its a bit weird having this here. Consider moving it to immutable.js.
+        'use strict';
         let n = 1000
         this.timeout(n * 5)
-        const origDoc = { x: 'hi', y: 'omg', z: [1, 'whoa', 3] }
+        const origDoc = deepFreeze({ x: 'hi', y: 'omg', z: [1, 'whoa', 3] })
 
         for (let i = 0; i < n; i++) {
           log(`\n\n======== iter ${i} =========`)
           const [op, doc] = genOp(origDoc)
+          deepFreeze(op) // make sure nothing in the original operation gets mutated.
           const opInv = type.invertWithDoc(op, origDoc)
 
           log('op', type.makeInvertible(op, origDoc))

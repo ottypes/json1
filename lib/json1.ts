@@ -1410,7 +1410,6 @@ function makeInvertible(op: JSONOp, doc: Doc) {
 
   log('makeInvertible', op, doc)
   if (op == null || !anyComponent(op, c => (
-    // TODO: Could tighten this bound to only look for subtypes with makeInvertible.
     c.r !== undefined || getEditType(c)?.makeInvertible != null
   ))) return op
 
@@ -1502,14 +1501,27 @@ function makeInvertible(op: JSONOp, doc: Doc) {
       w.ascend()
     }
 
-    if (c && c.r !== undefined) {
-      log('write r', subDoc)
-      w.write('r', subDoc)
-      subDoc = undefined
+    if (c) {
+      if (c.r !== undefined) {
+        log('write r', subDoc)
+
+        // Sooo I'm not sure whether we should clone here. The function is
+        // correct without the call to clone - but making deep references to
+        // parts of the document from the returned operation is risky and error
+        // prone. There's probably some neat tricks we could do in this method
+        // to avoid the clone here - but I think this a fine solution (since
+        // usually removed sections will be small anyway)
+        w.write('r', deepClone(subDoc as Doc))
+        subDoc = undefined
+      } else if (c.p != null) {
+        // Its gone somewhere else. Note that anything that was picked up cannot
+        // have also been removed, so this is safe.
+        subDoc = undefined
+      }
     }
 
+    log('tp returning', subDoc)
     decPrefix()
-    
     return subDoc
   }
 
@@ -1567,13 +1579,11 @@ function makeInvertible(op: JSONOp, doc: Doc) {
           traverseDrop(ap(key), rDrop, w, child)
           w.ascend()
         }
-        
       }
 
       decPrefix()
     }
 
-    
     traverseDrop(r.clone(), r, w, doc)
   }
 
