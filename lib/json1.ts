@@ -1474,6 +1474,7 @@ function makeInvertible(op: JSONOp, doc: Doc) {
     // keys need to be removed from subdoc, we'll mess up the list's order.
     let listOff = 0
 
+    // Recurse to children
     for (const key of r) {
       w.descend(key)
 
@@ -1533,7 +1534,7 @@ function makeInvertible(op: JSONOp, doc: Doc) {
     w.reset()
 
     function traverseDrop(rPick: ReadCursor | null, rDrop: ReadCursor,
-      w: WriteCursor, subDoc: Doc | undefined) {
+      w: WriteCursor, subDoc: Doc | undefined, isLiteral: boolean) {
 
       if (!RELEASE_MODE) log('traverseDrop', rPick?.getPath(), rDrop.getPath(), w.getPath(), subDoc)
       incPrefix()
@@ -1541,10 +1542,14 @@ function makeInvertible(op: JSONOp, doc: Doc) {
       const c = rDrop.getComponent()
 
       if (c) {
-        if (c.i !== undefined) subDoc = c.i
-        else if (c.d != null) {
+        if (c.i !== undefined) {
+          subDoc = c.i
+          isLiteral = true
+          log('using inserted subdoc', subDoc)
+        } else if (c.d != null) {
           subDoc = heldDoc[c.d]
           rPick = heldPick[c.d]
+          isLiteral = false
           log('teleporting to pick', c.d, subDoc)
         }
 
@@ -1567,17 +1572,17 @@ function makeInvertible(op: JSONOp, doc: Doc) {
           const mid = key - dropOff
           const _rPick = ap(mid)
           const raw = mid + pickOff
-          log('key', key, 'mid', mid, 'raw', raw)
+          log('key', key, 'mid', mid, 'raw', raw, 'isLiteral', isLiteral)
 
-          const child = maybeGetChild(subDoc, raw)
+          const child = maybeGetChild(subDoc, isLiteral ? mid : raw)
           w.descend(key)
-          traverseDrop(_rPick, rDrop, w, child)
+          traverseDrop(_rPick, rDrop, w, child, isLiteral)
           if (hasDrop(rDrop.getComponent())) dropOff++
           w.ascend()
         } else {
           const child = maybeGetChild(subDoc, key)
           w.descend(key)
-          traverseDrop(ap(key), rDrop, w, child)
+          traverseDrop(ap(key), rDrop, w, child, isLiteral)
           w.ascend()
         }
       }
@@ -1586,7 +1591,7 @@ function makeInvertible(op: JSONOp, doc: Doc) {
       decPrefix()
     }
 
-    traverseDrop(r.clone(), r, w, doc)
+    traverseDrop(r.clone(), r, w, doc, false)
   }
 
   const result = w.get()

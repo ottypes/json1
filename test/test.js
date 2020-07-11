@@ -815,6 +815,23 @@ describe('json1', () => {
           [ 'z', { r: [ 1, 3 ] }, 1, { p: 0 } ]
         ]
       ))
+
+      it('ignores rm based index offsets when iterating through an insert literal', () => mi(
+        [ 'z', { r: true, i: [ 'mimsy' ] }, 0, { r: true, es: [ { d: 3 } ]} ],
+        { z: [ 'x' ] },
+        [ 'z', { r: [], i: [ 'mimsy' ] }, 0, { r: 'x', es: [ { d: 'mim' } ] } ]
+      ))
+
+      it('takes into account insert index offsets through an insert literal', () => mi(
+        [ { i: [ 'abc' ], r: true },
+          [ 0, { i: 'a' } ],
+          [ 1, { es: [ { d: 3 } ] } ] ],
+        true,
+        [ { i: [ 'abc' ], r: true },
+          [ 0, { i: 'a' } ],
+          [ 1, { es: [ { d: 'abc' } ] } ]
+        ]
+      ))
     })
 
     describe('invert', () => {
