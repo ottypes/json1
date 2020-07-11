@@ -1300,7 +1300,7 @@ function invert(op: JSONOp): JSONOp {
     //
     // w is in the pick context.
     function transformEdits(rPick: ReadCursor | null, rDrop: ReadCursor, w: WriteCursor) {
-      if (!RELEASE_MODE) log('invXE', rPick?.getPath(), rDrop.getPath())
+      if (!RELEASE_MODE) log('invXE', rPick?.getPath(), rDrop.getPath(), w.getPath())
       incPrefix()
 
       const cd = rDrop.getComponent()
@@ -1332,18 +1332,21 @@ function invert(op: JSONOp): JSONOp {
           const mid = key - dropOff
           const _rPick = ap(mid)
           const raw = mid + pickOff
+          log('descend', key, mid, raw, 'dropOff', dropOff, 'pickOff', pickOff)
           w.descend(raw)
           transformEdits(_rPick, rDrop, w)
           if (hasDrop(rDrop.getComponent())) dropOff++
           w.ascend()
         } else {
           w.descend(key)
-          transformEdits(ap(key), rDrop, w)
+          const _rPick = ap(key)
+          transformEdits(_rPick, rDrop, w)
           w.ascend()
         }
         
       }
 
+      ap.end()
       decPrefix()
     }
 
@@ -1579,6 +1582,7 @@ function makeInvertible(op: JSONOp, doc: Doc) {
         }
       }
 
+      ap.end()
       decPrefix()
     }
 

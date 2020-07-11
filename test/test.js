@@ -914,9 +914,22 @@ describe('json1', () => {
         {a: {x: '_'}}
       ))
 
-      it('adjusts indexes when it bakes based off inline inserts', () => i( // repro
+      it('adjusts indexes when it bakes based off inline inserts', () => i( // regression
         [ {i: [ 99 ]}, [ 0, { i: null } ], [ 1, { ena: 1 } ] ],
         [ { r: [ 100 ] }, 0, { r: null } ]
+      ))
+
+      it('traversal picks the right index in complex situations', () => i( // fuzzer nonsense
+        [
+          [ 'a', { i: { } }, 'b', { d: 0 } ],
+          [ 'z', [ 0, { i: '', r: 1 } ], [ 1, { p: 0, ena: 9 } ] ]
+        ],
+        [
+          [ 'a', { r: { } }, 'b', { p: 0 } ],
+          [ 'z', [ 0, { i: 1, r: '' } ], [ 1, { d: 0 } ], [2, {ena: -9} ] ]
+        ],
+        { x: 'hi', y: 'omg', z: [1, 'whoa', 3] }
+        // { x: 'hi', y: 'omg', z: [ '', 12 ], a: { b: 'whoa' } }
       ))
     })
 
