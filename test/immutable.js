@@ -23,12 +23,7 @@ describe('immutable guarantees', function() {
       try {
         type.apply(origDoc, op)
       } catch (e) {
-        console.log(
-          [
-            'Apply failed! Repro ',
-            `apply( ${JSON.stringify(origDoc)}, ${JSON.stringify(op)} )`
-          ].join('')
-        )
+        console.log(`Apply failed! Repro apply( ${JSON.stringify(origDoc)}, ${JSON.stringify(op)} )`)
         throw e
       }
 

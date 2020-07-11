@@ -160,12 +160,7 @@ type DocObj = {[k: string]: Doc}
 function removeChild(container: Doc[] | DocObj, key: Key) {
   assert(container != null)
   if (typeof key === 'number') { // Removing from a list
-    try {
-      assert(Array.isArray(container), 'Invalid key - child is not an array')
-    } catch (e) {
-      debugger
-      throw e
-    }
+    assert(Array.isArray(container), 'Invalid key - child is not an array')
     container = container.slice()
     container.splice(key, 1)
   } else { // Removing from an object
@@ -204,6 +199,10 @@ const isValidKey = (container: Doc | undefined, key: Key): boolean => (
     : typeof key === 'number'
       ? Array.isArray(container)
       : typeof container === 'object'
+)
+
+const maybeGetChild = (container: Doc | undefined, key: Key): Doc | undefined => (
+  isValidKey(container, key) ? (container as any)[key] : undefined
 )
 
 // *******
@@ -1268,21 +1267,21 @@ function invert(op: JSONOp): JSONOp {
 
     for (const key of r) {
       if (w) w.descend(key)
-      const childSubdocIn = isValidKey(subDoc, key)
+      const childIn = isValidKey(subDoc, key)
         ? (subDoc as any)[key]
         : undefined
       // childSubdocOut is undefined if either we aren't in an insert or the
       // subdoc wasn't mutated.
-      const childSubdocOut = invertSimple(r, w, childSubdocIn)
+      const childOut = invertSimple(r, w, childIn)
       // TODO: subDoc !== undefined check here might be redundant.
-      if (subDoc !== undefined && childSubdocOut !== undefined) {
+      if (subDoc !== undefined && childOut !== undefined) {
         if (!subdocModified) {
           subdocModified = true
           // And shallow clone
           subDoc = shallowClone(subDoc)
         }
         if (!isValidKey(subDoc, key)) throw Error('Cannot modify child - invalid operation')
-        ;(subDoc as any)[key] = childSubdocOut
+        ;(subDoc as any)[key] = childOut
       }
       if (w) w.ascend()
     }
@@ -1350,12 +1349,13 @@ function invert(op: JSONOp): JSONOp {
       decPrefix()
     }
 
-    transformEdits(r.clone(), r, w)
     w.reset()
-
+    transformEdits(r.clone(), r, w)
+    
     if (heldWrites.length) {
       if (!RELEASE_MODE) log('Merging held writes', heldWrites.map(w => w.get()))
-
+      w.reset()
+      
       // Merge held writes
       r.traverse(w, (c, w) => {
         log('traverse', c)
@@ -1385,7 +1385,29 @@ const anyComponent = (op: JSONOpList, fn: (c: JSONOpComponent) => boolean): bool
   ))
 )
 
+/**
+ * Make an operation invertible. (So, you can call invert(op) after this).
+ *
+ * This is needed because r:XX contents are optional in an operation, and may be
+ * optional in subtypes as well. (Eg text-unicode).
+ *
+ * This method does two main things:
+ *
+ * - Fills in r:{} bodies in components by copying data in from the document
+ * - Recursively calls makeInvertible on any types embedded in the operation.
+ *
+ * Note transform (and compose?) discards remove information, so if you call
+ * transform on an invertible operation you will need to call makeInvertible
+ * again before inverting.
+ */
 function makeInvertible(op: JSONOp, doc: Doc) {
+  // Sooo, this method is a bit funny. Its become in many ways a
+  // reimplementation of apply(), because it needs to deeply understand how the
+  // operation will be overlaid on top of the document. Both functions could
+  // easily be merged - although because apply was written much earlier, it
+  // doesn't use the cursor utility code. Its also probably a little bit faster
+  // as a result.
+
   log('makeInvertible', op, doc)
   if (op == null || !anyComponent(op, c => (
     // TODO: Could tighten this bound to only look for subtypes with makeInvertible.
@@ -1396,53 +1418,167 @@ function makeInvertible(op: JSONOp, doc: Doc) {
   const w = new WriteCursor()
 
   // Basically we're going to copy r to w and traverse doc along the way. When
-  // we run into r: components we'll deep clone from doc.
+  // we run into r: components we'll clone from doc.
 
-  // This approach ends up deep cloning op, even though a shallow copy would do.
-  // I'm not too worried about the performance impact here.
+  // TODO: Currently this only shallow clones the removed sections in, which is
+  // probably not safe given how people will use this library.
 
-  const traverse = (r: ReadCursor, w: WriteCursor, subDoc: Doc | undefined) => {
+  // Unfortunately this needs to be a lot more complicated for edits. For edits
+  // we need to effectively partially unapply / reverse transform the operation
+  // to be able to figure out where in the original document the edited content
+  // comes from. We'll only run that extra pass if we determine its needed.
+  let hasEdits = false
+  const heldPick: ReadCursor[] = []
+  const heldDoc: Doc[] = []
+
+  const traversePick = (r: ReadCursor, w: WriteCursor, subDoc: Doc | undefined) => {
+    if (!RELEASE_MODE) log('traversePick', r.getPath(), subDoc)
+    incPrefix()
     const c = r.getComponent()
-    // log('traverse', subDoc, c)
+    let modified = false
+
     if (c) {
-      for (const k of ['p', 'd', 'i'] as (keyof JSONOpComponent)[]) {
-        if (c[k] !== undefined) w.write(k, c[k])
-        if (c[k] !== undefined) log('copying field', k)
+      // These two can just be copied directly. Its arguably cleaner to copy
+      // them in the second pass, but this is fine.
+      if (c.d != null) w.write('d', c.d)
+      if (c.i !== undefined) w.write('i', c.i)
+
+      const pickSlot = c.p
+      if (pickSlot != null) {
+        heldPick[pickSlot] = r.clone() // for second pass.
+        assert(subDoc !== undefined, 'Operation picks up at an invalid key')
+        heldDoc[pickSlot] = subDoc
+        w.write('p', c.p)
       }
 
       // Copy remove - but deep clone from document
       if (c.r !== undefined) {
-        if (subDoc === undefined) throw Error('Invalid document in makeInvertible: removed item missing from doc')
-        w.write('r', shallowClone(subDoc))
+        if (subDoc === undefined) throw Error('Invalid doc / op in makeInvertible: removed item missing from doc')
+        // Actual remove logic handled after the traversal.
+        // w.getComponent()
       }
 
-      // Copy edit, but recursively call makeInvertible if we can.
+      // We'll need to run the second pass to find out where in the resulting
+      // document this edit will apply.
       const t = getEditType(c)
       if (t) {
-        const edit = getEdit(c)
-        // log('edit', edit, 'type', t)
-        writeEdit(w, t,
-          t.makeInvertible
-            ? t.makeInvertible(edit, subDoc)
-            : edit,
-          true)
+        // This feels a little dangerous. If the subtype doesn't need
+        // makeInvertible called, we don't need to do the second pass to copy it
+        // in... right?
+        if (t.makeInvertible) hasEdits = true
+        else writeEdit(w, t, getEdit(c), true)
       }
     }
+
+    // There's a tricky problem here. If we're traversing a list and some of the child
+    // keys need to be removed from subdoc, we'll mess up the list's order.
+    let listOff = 0
 
     for (const key of r) {
       w.descend(key)
-      const child = isValidKey(subDoc, key)
-        ? (subDoc as any)[key]
+
+      const keyRaw = typeof key === 'number'
+        ? key - listOff
+        : key
+      const childIn = isValidKey(subDoc, keyRaw)
+        ? (subDoc as any)[keyRaw]
         : undefined
-      traverse(r, w, child)
+      const childOut = traversePick(r, w, childIn)
+
+      if (childIn !== childOut) {
+        log('childOut != childIn', childIn, childOut, key, keyRaw)
+        if (!modified) {
+          modified = true
+          subDoc = shallowClone(subDoc as Doc)
+        }
+
+        // removeChild also does a shallow clone, which isn't strictly needed here.
+        if (childOut === undefined) {
+          subDoc = removeChild(subDoc as any, keyRaw)
+          if (typeof key === 'number') listOff++
+        } else (subDoc as any)[keyRaw] = childOut
+        log('subDoc ->', subDoc)
+      }
       w.ascend()
     }
+
+    if (c && c.r !== undefined) {
+      log('write r', subDoc)
+      w.write('r', subDoc)
+      subDoc = undefined
+    }
+
+    decPrefix()
+    
+    return subDoc
   }
 
-  traverse(r, w, doc)
+  traversePick(r, w, doc)
+  log('after traversePick', w.get())
+
+  if (hasEdits) {
+    w.reset()
+
+    function traverseDrop(rPick: ReadCursor | null, rDrop: ReadCursor,
+      w: WriteCursor, subDoc: Doc | undefined) {
+
+      if (!RELEASE_MODE) log('traverseDrop', rPick?.getPath(), rDrop.getPath(), w.getPath(), subDoc)
+      incPrefix()
+
+      const c = rDrop.getComponent()
+
+      if (c) {
+        if (c.i !== undefined) subDoc = c.i
+        else if (c.d != null) {
+          subDoc = heldDoc[c.d]
+          rPick = heldPick[c.d]
+          log('teleporting to pick', c.d, subDoc)
+        }
+
+        let t = getEditType(c)
+        if (t && t.makeInvertible) {
+          const edit = getEdit(c)
+          log('makeInvertible on child', edit, subDoc)
+          writeEdit(w, t, t.makeInvertible(edit, subDoc), true)
+        }
+      }
+
+      // Recurse.
+      let pickOff = 0, dropOff = 0
+      const ap = advancer(rPick,
+        (k, c) => hasPick(c) ? (pickOff - k - 1) : k - pickOff,
+        (k, c) => { if (hasPick(c)) pickOff++ })
+  
+      for (const key of rDrop) {
+        if (typeof key === 'number') {
+          const mid = key - dropOff
+          const _rPick = ap(mid)
+          const raw = mid + pickOff
+          log('key', key, 'mid', mid, 'raw', raw)
+
+          const child = maybeGetChild(subDoc, raw)
+          w.descend(key)
+          traverseDrop(_rPick, rDrop, w, child)
+          if (hasDrop(rDrop.getComponent())) dropOff++
+          w.ascend()
+        } else {
+          const child = maybeGetChild(subDoc, key)
+          w.descend(key)
+          traverseDrop(ap(key), rDrop, w, child)
+          w.ascend()
+        }
+        
+      }
+
+      decPrefix()
+    }
+
+    
+    traverseDrop(r.clone(), r, w, doc)
+  }
 
   const result = w.get()
-  log('-> invertible:', result)
+  log('-> makeInvertible returning', result)
   if (!RELEASE_MODE) checkValidOp(result)
   return result
 }

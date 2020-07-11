@@ -8,6 +8,7 @@
 const assert = require('assert')
 const { type } = require('../dist/json1')
 const log = require('../dist/log').default
+const genOp = require('./genOp')
 const deepClone = require('../dist/deepClone').default
 
 const { transform } = type
@@ -733,6 +734,60 @@ describe('json1', () => {
           'abcdef',
           [{es:[1, {d:'bcdef'}]}]
         ))
+
+      it('only embeds remove data not covered by child removes (obj)', () => mi(
+        [{r: true}, 'y', {r: true}],
+        {x: 5, y: 6},
+        [{r: {x: 5}}, 'y', {r: 6}],
+      ))
+
+      it('only embeds remove data not covered by child removes (list)', () => mi(
+        [{r: true}, 1, {r: true}],
+        ['a', 'b', 'c'],
+        [{r: ['a', 'c']}, 1, {r: 'b'}],
+      ))
+
+      it('adjusts list offsets correctly', () => mi(
+        [{r: true}, [0, {r: true}], [2, {r: true}]],
+        ['a', 'b', 'c'],
+        [{r: ['b']}, [0, {r: 'a'}], [2, {r: 'c'}]]
+      ))
+
+      it('calls makeInvertible on moved children', () => mi(
+        [['x', {p:0}], ['y', {d:0, es:[{d:5}]}]],
+        {x: 'abcde'},
+        [['x', {p:0}], ['y', {d:0, es:[{d:'abcde'}]}]],
+      ))
+
+      it('calls makeInvertible on inserted children', () => mi(
+        ['x', {i: 'hi', es: [{d:2}]}],
+        {},
+        ['x', {i: 'hi', es: [{d:'hi'}]}]
+      ))
+
+      it('adjusts position for makeInvertible based on removes', () => mi(
+        [[0, {r:true}], [1, {es: [{d:2}]}]],
+        ['a', 'b', 'hi'],
+        [[0, {r:'a'}], [1, {es: [{d:'hi'}]}]]
+      ))
+
+      it('adjusts position for makeInvertible based on removes 2', () => mi(
+        [0, {r:true, es: [{d:2}]}],
+        ['a', 'hi'],
+        [0, {r:'a', es: [{d:'hi'}]}]
+      ))
+
+      it('adjusts position for makeInvertible based on inserts', () => mi(
+        [[0, {i:'a'}], [2, {es: [{d:2}]}]],
+        ['b', 'hi'],
+        [[0, {i:'a'}], [2, {es: [{d:'hi'}]}]],
+      ))
+
+      it('repro 1', () => mi(
+        [ [ 'b', { i: null } ], [ 'y', { r: true } ] ],
+        { y: 'omg' },
+        [ [ 'b', { i: null } ], [ 'y', { r: 'omg' } ] ]
+      ))
     })
 
     describe('invert', () => {
@@ -746,6 +801,10 @@ describe('json1', () => {
         const doc2 = type.apply(doc1, expected) // and then undone
 
         assert.deepStrictEqual(doc, doc2)
+
+        // Check the inverted operation normalizes normally.
+        const normalized = type.normalize(actual)
+        assert.deepStrictEqual(actual, normalized, 'inverted op not canonical')
       }
 
       it('inverts child operations', () => i(
@@ -764,6 +823,12 @@ describe('json1', () => {
         [['x', {p:0}], ['y', {d:0}]],
         [['x', {d:0}], ['y', {p:0}]],
         {x:5}
+      ))
+        
+      it('swaps pick and drop locations in a way that normalizes canonically', () => i(
+        [['a', {p:0}], ['b', {p:1}], ['c', {d:0}], ['d', {d:1}]],
+        [['a', {d:0}], ['b', {d:1}], ['c', {p:0}], ['d', {p:1}]],
+        {a: 5, b: 6}
       ))
         
       it('teleports embedded edits based on the parent move', () => i(
@@ -821,6 +886,28 @@ describe('json1', () => {
         [['a', {d:0}, 'x', {es:[{d:'x'}]}], ['b', {r: {}}, 'a', {p:0}]],
         {a: {x: '_'}}
       ))
+    })
+
+    describe('invert fuzzer', () => {
+      // This is a tiny version of the normal fuzzer's tests, just for invert.
+
+      it('invert fuzz', function () {
+        let n = 1000
+        this.timeout(n * 5)
+        const origDoc = { x: 'hi', y: 'omg', z: [1, 'whoa', 3] }
+
+        for (let i = 0; i < n; i++) {
+          log(`\n\n======== iter ${i} =========`)
+          const [op, doc] = genOp(origDoc)
+          const opInv = type.invertWithDoc(op, origDoc)
+
+          log('op', type.makeInvertible(op, origDoc))
+          log('opInv', opInv)
+
+          const docLoop = type.apply(doc, opInv)
+          assert.deepStrictEqual(docLoop, origDoc)
+        }
+      })
     })
   })
 
