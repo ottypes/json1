@@ -263,6 +263,7 @@ describe('json1', () => {
       fail([10, {}])
       fail([10, { invalid: true }])
       fail([10, 'hi'])
+      fail([[{ i: 123 }]])
     })
 
     it('throws if there is any empty leaves', () => {
@@ -322,7 +323,7 @@ describe('json1', () => {
     })
 
     it('throws if descents start with the same scalar', () =>
-      fail(['x', ['a', { r: {} }], ['a', { e: {} }]]))
+      fail(['x', ['a', { r: {} }], ['a', { es: ['hi'] }]]))
 
     it('throws if descents have two adjacent edits', () => {
       fail([{ r: {} }, { p: 0 }])
@@ -332,13 +333,14 @@ describe('json1', () => {
 
     it.skip('does not allow ops to overwrite their own inserted data', () => {
       fail([{ i: { x: 5 } }, 'x', { i: 6 }])
-      fail([{ i: ['hi'] }, 0, { i: 'omg' }])
+      fail([{ i: ['hi'] }, 0, { i: 'omg' }]) // Erm this looks ok...
     })
 
-    it.skip('does not allow immediate data directly parented in other immediate data', () => {
-      fail([{ i: {} }, 'x', { i: 5 }])
-      fail([{ i: { x: 5 } }, 'x', 'y', { i: 6 }])
-      fail([{ i: [] }, 0, { i: 5 }])
+    it('allows immediate data directly parented in other immediate data', () => {
+      // TODO: We want to explicitly allow this for setNull behaviour.
+      pass([{ i: {} }, 'x', { i: 5 }])
+      pass([{ i: { x: {} } }, 'x', 'y', { i: 6 }])
+      pass([{ i: [] }, 0, { i: 5 }])
     })
 
     it('does not allow the final item to be a single descent', () =>
@@ -393,7 +395,7 @@ describe('json1', () => {
         fail([{ e: null, et: 'an undefined type' }])
       })
 
-      it('does not allow two edits in the same operation', () => {
+      it('does not allow two edits in the same component', () => {
         fail([{ e: {}, et: 'simple', es: [1, 2, 3] }])
         fail([{ es: ['hi'], ena: 5 }])
         fail([{ e: {}, et: 'simple', ena: 5 }])

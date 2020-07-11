@@ -198,7 +198,7 @@ const replaceChild = (obj: Doc[] | DocObj, k: Key, v: any) => {
   return obj
 }
 
-const isValidKey = (container: Doc | undefined, key: Key) => (
+const isValidKey = (container: Doc | undefined, key: Key): boolean => (
   container == null
     ? false
     : typeof key === 'number'
@@ -387,7 +387,7 @@ function checkValidOp(op: JSONOp) {
       }
     }
 
-    assert(numDescents !== 1)
+    assert(numDescents !== 1, 'Operation makes multiple descents. Remove some []')
     assert(last === EDIT || last === DESCENT)
 
     return descent[0] as Key

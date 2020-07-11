@@ -9,7 +9,8 @@ describe('immutable guarantees', function() {
   const origDoc = { x: 'hi', y: 'omg', z: [1, 'whoa', 3] }
   const expectDoc = deepClone(origDoc)
   const n = 1000
-  this.slow(n * 100)
+  // These tests are only slow in debug mode. In release mode they're pretty snappy.
+  this.slow(n * 500)
 
   it('apply does not mutate', () => {
     const result = []
