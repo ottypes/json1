@@ -297,6 +297,10 @@ describe('json1', () => {
       fail([undefined, { r: {} }])
     })
 
+    it('disallows __proto__', () => {
+      fail(['__proto__', { r: {} }])
+    })
+
     it('does not allow two pickups or two drops in a component', () => {
       fail([{ p: 0, r: {} }])
       fail([{ p: 1, r: {} }])

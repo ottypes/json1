@@ -23,6 +23,13 @@ function copyAll(c: JSONOpComponent, w: WriteCursor) {
   }
 }
 
+// It might be dangerous to allow __proto__ as a key path because of
+// javascript's prototype semantics, especially because most apps won't
+// check operations thoroughly enough.
+export const isValidPathItem = (k: Key) => (
+  typeof k === 'number' || (typeof k === 'string' && k !== '__proto__')
+)
+
 class Cursor {
   // Each time we descend we store the parent and the index of the child. The
   // indexes list is appended twice each time we descend - once with the last
@@ -293,6 +300,7 @@ export class WriteCursor extends Cursor {
   get() { return this._op }
 
   descend(key: Key) {
+    if (!isValidPathItem(key)) throw Error('Invalid JSON key')
     // log('descend', key)
     this.pendingDescent.push(key)
   }

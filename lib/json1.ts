@@ -11,21 +11,16 @@
 // The complete spec is in spec.md alongside this file.
 //
 //
-// ** This is still a work in progress. The tests don't all pass yet. **
-//
-// My TODO list:
-// - compose preserve invertable data
-// - makeInvertible and invert()
-
-// - setNull = ??
-// - remove N items in a list
-// - a backup move location in the op
+// A tiny todo list (new issues should go on github):
+// - compose should preserve invertible data
 // - Conversion between json1 ops and json0, json-patch.
+// - Conflict resolving methods to make a backup move location in the operation
+// - remove N items in a list - it'd be nice to be able to express this in O(1) instead of O(n).
 
 // import log from './log'
 import deepEqual from './deepEqual.js'
 import deepClone from './deepClone.js'
-import {ReadCursor, WriteCursor, readCursor, writeCursor, advancer, eachChildOf} from './cursor.js'
+import {ReadCursor, WriteCursor, readCursor, writeCursor, advancer, eachChildOf, isValidPathItem} from './cursor.js'
 import { Doc, JSONOpComponent, Path, Key, JSONOp, JSONOpList, Conflict, ConflictType } from './types.js'
 
 const RELEASE_MODE = process.env.JSON1_RELEASE_MODE
@@ -39,19 +34,6 @@ function assert(pred: any, msg?: string): asserts pred {
 }
 
 let debugMode = false
-
-
-// Conflicts - moved to types.ts
-// const DROP_INTO_REMOVE = 1
-// const RM_UNEXPECTED_CONTENT = 2
-// const DROP_COLLISION = 3
-// const BLACKHOLE = 4
-// const DROP_INTO_REMOVE = 'drop into remove'
-
-// const RM_UNEXPECTED_CONTENT = 1
-// const DROP_COLLISION = 2
-// const BLACKHOLE = 3
-
 
 export const type = {
   name: 'json1',
@@ -353,7 +335,7 @@ function checkValidOp(op: JSONOp) {
       assert(d != null)
 
       if (Array.isArray(d)) {
-        // TODO: We shouldn't really allow descent into removed objects.
+        // Recursive descent inside children
         const key = checkDescent(d, false, removed)
         if (numDescents) {
           const t1 = typeof lastKey
@@ -366,6 +348,7 @@ function checkValidOp(op: JSONOp) {
         numDescents++
         last = DESCENT
       } else if (typeof d === 'object') {
+        // Component
         assert(last === SCALAR, `Prev not scalar - instead ${last}`)
         checkComponent(d)
 
@@ -379,8 +362,10 @@ function checkValidOp(op: JSONOp) {
         // if (removed && getEditType(d) != null) throw Error('Cannot edit missing object')
         last = EDIT
       } else {
+        // Descent key
         assert(last !== DESCENT)
         checkScalar(d)
+        assert(isValidPathItem(d), 'Invalid path key') // They're trying to use __proto__ or something.
         last = SCALAR
         // lastScalarType = typeof d
       }
