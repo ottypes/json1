@@ -515,10 +515,10 @@ once@^1.3.0:
   dependencies:
     wrappy "1"
 
-ot-fuzzer@^1.1.0:
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/ot-fuzzer/-/ot-fuzzer-1.2.1.tgz#41f70305fdd1d55268f6cc169c14c0eb9e5fb31c"
-  integrity sha512-dOm+Wb1Mqrw8ql5ksiZFf3Bdsruj5r4mHaa3COqtbg0ClkGjxZXwMGgMLjWslq/b0maeiw5yvYwIdH6As4svHg==
+ot-fuzzer@1.3:
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/ot-fuzzer/-/ot-fuzzer-1.3.0.tgz#972a47672851eadc764622c25d39dbd92585cd83"
+  integrity sha512-cZNdwrLkJ+p+/go94KFFmuiXsXy66eot+TBrStEMTxs4tGCQl43EKeqpTe9GpgVlftpWqzbzetIuZsg2s98QqQ==
   dependencies:
     cli-progress "^2.1.1"
     seedrandom "^2.4.4"
