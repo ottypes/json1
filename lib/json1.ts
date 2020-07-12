@@ -423,7 +423,7 @@ function normalize(op: JSONOp) {
  * The snapshot is shallow copied as its edited, so the previous snapshot
  * reference is still valid.
  */
-function apply(snapshot: Doc, op: JSONOp) {
+function apply(snapshot: Doc | undefined, op: JSONOp) {
   // Apply doesn't make use of cursors. It might be a little simpler to
   // implement apply using them. The reason they aren't used here is merely
   // historical - the cursor implementation was written after apply() was
@@ -470,9 +470,7 @@ function apply(snapshot: Doc, op: JSONOp) {
       stack.push(subDoc)
       // Its valid to descend into a null space - just we can't pick there, so
       // we'll set subdoc to undefined in those cases.
-      subDoc = isValidKey(subDoc, d)
-        ? (subDoc as any)[d]
-        : undefined
+      subDoc = maybeGetChild(subDoc, d)
     }
 
     // Children. These need to be traversed in reverse order here.
@@ -489,9 +487,7 @@ function apply(snapshot: Doc, op: JSONOp) {
         const container = stack.pop()
 
         // Mirrored from above, which is a little gross.
-        const expectedChild = isValidKey(container, d)
-          ? (container as any)[d]
-          : undefined
+        const expectedChild = maybeGetChild(container, d)
         // Have fuuuuunnnn! (TODO: Clean this mess up. And what should / does this do if container is a string / number?)
         subDoc = (subDoc === expectedChild)
           ? container
@@ -565,7 +561,7 @@ function apply(snapshot: Doc, op: JSONOp) {
         // Actually we should check that the types match.
 
         // TODO: Use isValidKey to check this.
-        subDoc = isValidKey(subDoc, d) ? (subDoc as any)[d] : undefined
+        subDoc = maybeGetChild(subDoc, d) as Doc
         // subDoc = subDoc != null ? (subDoc as any)[d] : undefined
       }
     }
@@ -1477,9 +1473,7 @@ function makeInvertible(op: JSONOp, doc: Doc) {
       const keyRaw = typeof key === 'number'
         ? key - listOff
         : key
-      const childIn = isValidKey(subDoc, keyRaw)
-        ? (subDoc as any)[keyRaw]
-        : undefined
+      const childIn = maybeGetChild(subDoc, keyRaw)
       const childOut = traversePick(r, w, childIn)
 
       if (childIn !== childOut) {
