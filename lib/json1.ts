@@ -385,10 +385,6 @@ function checkValidOp(op: JSONOp) {
     assert(pickedSlots.has(i))
     assert(droppedSlots.has(i))
   }
-
-  //console.log numPickSlots, numDropSlots, pickedSlots, droppedSlots
-
-  //console.log '---> ok', op
 }
 
 function normalize(op: JSONOp) {

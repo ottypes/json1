@@ -15,7 +15,7 @@ const { transform } = type
 const { DROP_COLLISION, RM_UNEXPECTED_CONTENT, BLACKHOLE } = type
 
 const apply = ({ doc: snapshot, op, expect }) => {
-  type.setDebug(false)
+  // type.setDebug(false)
 
   const orig = deepClone(snapshot)
   try {
@@ -226,7 +226,7 @@ const path = (path, { op, expect }) => {
 describe('json1', () => {
   before(() => {
     type.registerSubtype(require('ot-simple'))
-    return type.setDebug(true)
+    // type.setDebug(true)
   })
   after(() => type.setDebug(false))
 
@@ -955,22 +955,37 @@ describe('json1', () => {
 
       it('invert fuzz', function () {
         // Its a bit weird having this here. Consider moving it to immutable.js.
-        'use strict';
         let n = 1000
+        // this.timeout(0)
         this.timeout(n * 5)
+        this.slow(n * 2)
         const origDoc = deepFreeze({ x: 'hi', y: 'omg', z: [1, 'whoa', 3] })
 
         for (let i = 0; i < n; i++) {
+          // if (i % 10000 == 0) console.log(i)
           log(`\n\n======== iter ${i} =========`)
           const [op, doc] = genOp(origDoc)
           deepFreeze(op) // make sure nothing in the original operation gets mutated.
-          const opInv = type.invertWithDoc(op, origDoc)
 
-          log('op', type.makeInvertible(op, origDoc))
-          log('opInv', opInv)
+          try {
+            // invertWithDoc is just a wrapper around makeInvertible then invert
+            // anyway. Breaking them out helps in debugging.
+            // const opInv = type.invertWithDoc(op, origDoc)
+            const op1 = type.makeInvertible(op, origDoc)
+            const opInv = type.invert(op1)
 
-          const docLoop = type.apply(doc, opInv)
-          assert.deepStrictEqual(docLoop, origDoc)
+            log('op', op1)
+            log('opInv', opInv)
+
+            const docLoop = type.apply(doc, opInv)
+            assert.deepStrictEqual(docLoop, origDoc)
+          } catch (e) {
+            console.error('Crashed at iteration', i)
+            type.setDebug(true)
+            log('op', op)
+            log('doc', doc)
+            throw e
+          }
         }
       })
     })
