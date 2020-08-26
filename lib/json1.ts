@@ -157,6 +157,7 @@ function removeChild(container: Doc[] | DocObj, key: Key) {
 function insertChildMut(container: Doc[] | DocObj, key: Key, value: Doc) {
   if (typeof key === 'number') {
     assert(Array.isArray(container), 'Cannot use numerical key for object container')
+    assert(container.length >= key, 'Cannot insert into out of bounds index')
     //container = container.slice()
     container.splice(key, 0, value)
   } else {

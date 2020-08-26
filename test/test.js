@@ -636,6 +636,10 @@ describe('json1', () => {
 
     it('throws if the type is missing', () =>
       assert.throws(() => type.apply({}, [{ et: 'missing', e: {} }])))
+
+    it('throws when the op inserts in out of bound index', () => {
+      assert.throws(() => type.apply([0], [2, { i: 2 }]))
+    })
   })
 
   describe('apply path', () => {
