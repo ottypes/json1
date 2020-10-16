@@ -57,6 +57,10 @@ export type JSONOp = null | JSONOpList
 
 export type Key = number | string
 export type Path = Key[]
+export type Presence = {
+    start: Path,
+    end: Path,
+}
 
 /**
  * JSON documents must be able to round-trip through JSON.stringify /
