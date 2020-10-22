@@ -83,4 +83,13 @@ describe("presences", () => {
       presenceAfter
     );
   });
+
+  it("allows arbitrary data in presences", () => {
+    const op = ["z", 0, { i: "hello" }];
+    const data = { user: "John Doe", color: "blue" };
+    const presenceBefore = { start: ["z", 0], end: ["z", 1], data };
+    const presenceAfter = type.transformPresence(presenceBefore, op);
+
+    assert.ok(presenceBefore.data === presenceAfter.data);
+  });
 });

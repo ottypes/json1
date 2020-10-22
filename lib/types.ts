@@ -60,6 +60,7 @@ export type Path = Key[]
 export type Presence = {
     start: Path,
     end: Path,
+    [key: string]: any
 }
 
 /**

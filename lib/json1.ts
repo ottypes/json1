@@ -735,11 +735,11 @@ function transformPresence(presence: Presence | null, op: JSONOp, isOwnOperation
     const end = transformPosition(presence.end, op)
 
     if (start && end) {
-        return { start, end }
+        return { ...presence, start, end }
     } else if (start) {
-        return { start, end: start }
+        return { ...presence, start, end: start }
     } else if (end) {
-        return { start: end, end }
+        return { ...presence, start: end, end }
     }
 
     return null
