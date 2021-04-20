@@ -156,6 +156,7 @@ function removeChild(container: Doc[] | DocObj, key: Key) {
 // Insert value at key in container. Return container with new value
 function insertChildMut(container: Doc[] | DocObj, key: Key, value: Doc) {
   if (typeof key === 'number') {
+    assert(container != null, 'Container is missing for key')
     assert(Array.isArray(container), 'Cannot use numerical key for object container')
     assert(container.length >= key, 'Cannot insert into out of bounds index')
     //container = container.slice()
@@ -610,7 +611,7 @@ function transformPosition(path: Path, op: JSONOp): Path | null {
   // 1. The object at the path (or a parent) was removed
   // 2. Some parent was picked up
   // 3. The op doesn't modify this path, although it might insert before / after.
-  
+
   let removed = false
   let pickedAtSlot: number
   let pickIndex: number // index in path where pick happened
@@ -664,14 +665,17 @@ function transformPosition(path: Path, op: JSONOp): Path | null {
 
   // If we've been moved into a slot, we 100% don't care about anything above
   // the slot we've been dropped in.
-  
+
   const handleDrop = () => {
     incPrefix()
     let i = 0
     if (pickedAtSlot != null) {
-      i = pickIndex
-      if (!RELEASE_MODE) log('path', path, 'pi', pickIndex, 'r', r.getPath())
-      path = r.getPath().concat(path.slice(pickIndex))
+      // We've been dropped at some path. We teleport to the drop
+      // location and scan from there.
+      const rPath = r.getPath()
+      i = rPath.length
+      if (!RELEASE_MODE) log('path', path, 'pi', pickIndex, 'r', rPath)
+      path = rPath.concat(path.slice(pickIndex))
     }
 
     if (!RELEASE_MODE) log('handleDrop at path', path, 'read cursor', r.getPath())
@@ -682,7 +686,7 @@ function transformPosition(path: Path, op: JSONOp): Path | null {
       const k = path[i]
       // We don't actually care about drops here... they shouldn't happen in
       // general; but if they do then we'll silently ignore them.
-      
+
       const c = getComponent(r)
       const et = getEditType(c)
       if (et) {
