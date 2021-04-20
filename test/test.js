@@ -721,6 +721,18 @@ describe('json1', () => {
         expect: ['x', 'y', 'z']
       })
     })
+
+    it('works correctly with picks and drops', () => {
+      // From https://github.com/ottypes/json1/issues/27
+      path(['na', 0, 'nb', 0], {
+        op: [
+          { r: true, d: 0 },
+          [ "na", 0, { p: 0} ],
+          [ "nb", 0, { i: { object: "four" } } ]
+        ],
+        expect: ['nb', 1]
+      })
+    })
   })
 
   // ***** Invert *****
