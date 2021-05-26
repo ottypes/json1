@@ -1,6 +1,6 @@
 # JSON1
 
-> Status: Preview release. Usable; but contains known bugs. See below.
+> Status: Usable in practice, but contains a couple super obscure known bugs. See below for details.
 
 This is an operational transformation type for arbitrary JSON trees. It supports concurrently editing arbitrarily complex nested structures. Fancy features:
 
