@@ -95,7 +95,6 @@ Note that this library is currently in preview release. In practical terms, this
 - `applyPath` doesn't currently have fuzzer tests. There are probably a couple bugs there that the fuzzer will find as soon as we hook it up.
 - `applyPath` may be renamed to something else (`transformCursor` is what the equivalent method is called in the string type, although its a bit of a weird name here). This function also currently doesn't transform anything inside a child edit, and it should.
 - We're missing a conflict for situations when two operations both move the same object to different locations. Currently the left operation will silently 'win' and the other operation's move will be discarded. But this behaviour should be user configurable
-- I want the whole library ported to typescript once its correct
 - I haven't exposed the internal cursor API, which is used internally to traverse operations. I'd be happy to expose this if someone provides a good, clear use case for doing so.
 
 
