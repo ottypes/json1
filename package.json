@@ -12,6 +12,7 @@
     "mocha": "^7.1.1",
     "ot-fuzzer": "1.3",
     "ot-simple": "^1.0.0",
+    "rich-text": "^4.1.0",
     "terser": "^4.6.7",
     "typescript": "^3.9.5"
   },

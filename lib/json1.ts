@@ -20,8 +20,8 @@
 // import log from './log'
 import deepEqual from './deepEqual.js'
 import deepClone from './deepClone.js'
-import {ReadCursor, WriteCursor, readCursor, writeCursor, advancer, eachChildOf, isValidPathItem} from './cursor.js'
-import { Doc, JSONOpComponent, Path, Key, JSONOp, JSONOpList, Conflict, ConflictType } from './types.js'
+import { ReadCursor, WriteCursor, readCursor, writeCursor, advancer, eachChildOf, isValidPathItem } from './cursor.js'
+import { Doc, JSONOpComponent, Path, Presence, Key, JSONOp, JSONOpList, Conflict, ConflictType } from './types.js'
 
 const RELEASE_MODE = process.env.JSON1_RELEASE_MODE
 const log: (...args: any) => void = RELEASE_MODE ? (() => {}) : require('./log').default
@@ -57,6 +57,7 @@ export const type = {
 
   apply,
   transformPosition,
+  transformPresence,
   compose,
   tryTransform,
   transform,
@@ -692,7 +693,11 @@ function transformPosition(path: Path, op: JSONOp): Path | null {
       if (et) {
         const e = getEdit(c!)
         log('Embedded edit', e, et)
-        if (et.transformPosition) path[i] = et.transformPosition(path[i], e)
+        if (et.transformPosition) {
+            path[i] = et.transformPosition(path[i], e)
+        } else if (et.transformCursor) {
+            path[i] = et.transformCursor(path[i], e)
+        }
         // Its invalid for the operation to have drops inside the embedded edit here.
         break
       }
@@ -723,6 +728,25 @@ function transformPosition(path: Path, op: JSONOp): Path | null {
 
   log('-> transformPosition returning', path)
   return path
+}
+
+function transformPresence(presence: Presence | null, op: JSONOp, isOwnOperation: boolean): Presence | null {
+    if (!presence || !presence.start || !presence.end) {
+        return null
+    }
+
+    const start = transformPosition(presence.start, op)
+    const end = transformPosition(presence.end, op)
+
+    if (start && end) {
+        return { ...presence, start, end }
+    } else if (start) {
+        return { ...presence, start, end: start }
+    } else if (end) {
+        return { ...presence, start: end, end }
+    }
+
+    return null
 }
 
 
