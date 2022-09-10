@@ -68,7 +68,7 @@ export type Path = Key[]
  * - Functions
  * - Sets, Maps, Dates, DOM nodes, etc
  */
-export type Doc = null | boolean | number | string | Doc[] | {[k: string]: Doc}
+export type Doc = null | boolean | number | string | Doc[] | Record<string, Doc>
 
 export enum ConflictType {
   RM_UNEXPECTED_CONTENT = 1,
