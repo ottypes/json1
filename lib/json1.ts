@@ -2063,7 +2063,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
         // Copy the remove from op1.
         if (!removed2) {
           log('copying remove')
-          w.write('r', true) //c1.r
+          w.write('r', c1.r) //c1.r
         }
 
         if (removed2 || iAmMoved) {
@@ -2606,7 +2606,7 @@ function tryTransform(op1: JSONOp, op2: JSONOp, direction: 'left' | 'right'): {
     eachDrop(r2, w, (slot2, r, w) => {
       if (cancelledOp2[slot2] && !discardedOp2Drop[slot2]) {
         log('removing at held drop2', slot2)
-        w.write('r', true)
+        w.write('r', heldPickWrites[slot2]?.getComponent().r ?? true)
       }
 
       if (heldPickWrites[slot2]) {
